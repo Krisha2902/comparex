@@ -1,0 +1,32 @@
+export const recommendations = [
+  {
+    id: 1,
+    name: "OnePlus Pad Lite with Biggest Battery in Segment",
+    image: "https://m.media-amazon.com/images/I/51oj5gE7P+L._AC_UL320_.jpg",
+    rating: 4.3,
+    reviews: "710",
+    price: "13,999",
+    mrp: "19,999",
+    offer: "30% off • Limited time deal",
+  },
+  {
+    id: 2,
+    name: "OnePlus Pad Go 28.85 cm 2.4K Display Tablet",
+    image: "https://m.media-amazon.com/images/I/51gHfXkYV3L._SX679_.jpg",
+    rating: 4.4,
+    reviews: "3.8K",
+    price: "16,999",
+    mrp: "19,999",
+    offer: "15% off • No Cost EMI",
+  },
+  {
+    id: 3,
+    name: "Apple iPad 11th Gen 11-inch Liquid Retina Display",
+    image: "https://m.media-amazon.com/images/I/81jqUPkIVRL._SX679_.jpg",
+    rating: 4.6,
+    reviews: "999",
+    price: "33,990",
+    mrp: "34,900",
+    offer: "3% off • Free Delivery",
+  },
+];
