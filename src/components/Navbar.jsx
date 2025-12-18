@@ -25,8 +25,16 @@ export default function Navbar() {
               Categories
             </Link>
           </li>
-          <li className="hover:text-blue-600 cursor-pointer">Wishlist</li>
-          <li className="hover:text-blue-600 cursor-pointer">FAQ</li>
+          <li>
+            <Link to="/wishlist" className="hover:text-blue-600">
+            Wishlist
+            </Link>
+          </li>
+          <li>
+            <Link to="/ask" className="hover:text-blue-600">
+            Ask ValueVue
+            </Link>
+          </li>
           <li className="hover:text-blue-600 cursor-pointer">About Us</li>
           <li className="hover:text-blue-600 cursor-pointer">Blog</li>
         </ul>

@@ -1,4 +1,3 @@
-# CompareX
 
 Product Price Comparison Platform
 
