@@ -49,9 +49,9 @@ export default function Navbar() {
 
         {/* RIGHT LOGIN */}
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium">
-            Login / Signup
-          </span>
+          <Link to="/auth" className="text-sm font-medium hover:text-blue-600">
+          Login / Signup
+          </Link>
           <UserCircleIcon className="w-8 h-8 text-blue-600" />
         </div>
       </nav>
