@@ -35,8 +35,16 @@ export default function Navbar() {
             Ask ValueVue
             </Link>
           </li>
-          <li className="hover:text-blue-600 cursor-pointer">About Us</li>
-          <li className="hover:text-blue-600 cursor-pointer">Blog</li>
+          <li>
+            <Link to="/about" className="hover:text-blue-600">
+            About Us
+            </Link>
+          </li>
+          <li>
+            <Link to="/deals" className="hover:text-blue-600">
+            Smart Deals
+            </Link>
+          </li>
         </ul>
 
         {/* RIGHT LOGIN */}

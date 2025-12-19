@@ -4,6 +4,9 @@ import CategoryPage from "./pages/CategoryPage";
 import ProductPage from "./pages/ProductPage";
 import WishlistPage from "./pages/WishlistPage";
 import AskValueVue from "./pages/AskValueVue";
+import AboutUs from "./pages/AboutUs";
+import SmartDeals from "./pages/SmartDeals";
+
 
 
 
@@ -15,6 +18,8 @@ export default function App() {
       <Route path="/product" element={<ProductPage />} />
       <Route path="/wishlist" element={<WishlistPage />} />
       <Route path="/ask" element={<AskValueVue />} />
+      <Route path="/about" element={<AboutUs />} />
+      <Route path="/deals" element={<SmartDeals />} />
     </Routes>
   );
 }
