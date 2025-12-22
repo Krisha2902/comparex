@@ -104,6 +104,7 @@ export default function CategoryPage() {
                 key={cat.id}
                 name={cat.name}
                 icon={cat.icon}
+                slug={cat.slug}
               />
             ))}
           </div>

@@ -9,6 +9,7 @@ import {
   BookOpenIcon,
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
+import { useNavigate } from "react-router-dom";
 
 const iconMap = {
   ComputerDesktopIcon,
@@ -22,11 +23,26 @@ const iconMap = {
   WrenchScrewdriverIcon,
 };
 
-export default function CategoryCard({ name, icon }) {
+export default function CategoryCard({ name, icon, slug }) {
   const Icon = iconMap[icon];
+  const navigate = useNavigate();
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-[#f5faff] border border-[#dbeafe] rounded-xl shadow-sm hover:shadow-md hover:scale-[1.03] transition">
+    <div
+      onClick={() => navigate(`/categories/${slug}`)}
+      className="
+        cursor-pointer
+        flex items-center gap-3
+        px-4 py-3
+        bg-[#f5faff]
+        border border-[#dbeafe]
+        rounded-xl
+        shadow-sm
+        hover:shadow-md
+        hover:scale-[1.03]
+        transition
+      "
+    >
       <Icon className="w-5 h-5 text-blue-500" />
       <span className="text-sm font-medium text-slate-700">
         {name}

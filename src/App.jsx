@@ -9,6 +9,7 @@ import AboutUs from "./pages/AboutUs";
 import SmartDeals from "./pages/SmartDeals";
 import LoginSignup from "./pages/LoginSignup";
 import NetworkLoader from "./components/NetworkLoader";
+import CategoryProducts from "./pages/CategoryProducts";
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/about" element={<AboutUs />} />
       <Route path="/deals" element={<SmartDeals />} />
       <Route path="/auth" element={<LoginSignup />} />
+      <Route path="/categories/:slug" element={<CategoryProducts />} />
     </Routes>
   );
 }
