@@ -11,12 +11,12 @@ export default function RecommendationCard({ item }) {
       {/* IMAGE */}
       <div className="h-[170px] flex items-center justify-center">
         <img
-          src={item.image}
-          alt={item.name}
-          className="max-h-full object-contain"
+        src={item.image}
+        alt={item.name}
+        className="w-full h-40 object-contain"
+        referrerPolicy="no-referrer"
         />
       </div>
-
       {/* DETAILS */}
       <div className="mt-3 space-y-1">
         <p className="text-sm font-medium leading-snug line-clamp-2">
