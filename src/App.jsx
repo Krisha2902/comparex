@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Home from "./pages/Home";
 import CategoryPage from "./pages/CategoryPage";
@@ -10,9 +10,11 @@ import SmartDeals from "./pages/SmartDeals";
 import LoginSignup from "./pages/LoginSignup";
 import NetworkLoader from "./components/NetworkLoader";
 import CategoryProducts from "./pages/CategoryProducts";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -21,26 +23,52 @@ export default function App() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
+    // Listen for storage changes to update login state
+    const handleStorageChange = () => {
+      setIsLoggedIn(!!localStorage.getItem("token"));
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 
   if (!isOnline) {
     return <NetworkLoader />;
   }
+
   return (
     <Routes>
+      {/* Home page - accessible to everyone */}
       <Route path="/" element={<Home />} />
+
+      {/* Public pages */}
       <Route path="/categories" element={<CategoryPage />} />
+      <Route path="/categories/:slug" element={<CategoryProducts />} />
       <Route path="/product" element={<ProductPage />} />
-      <Route path="/wishlist" element={<WishlistPage />} />
       <Route path="/ask" element={<AskValueVue />} />
       <Route path="/about" element={<AboutUs />} />
       <Route path="/deals" element={<SmartDeals />} />
-      <Route path="/auth" element={<LoginSignup />} />
-      <Route path="/categories/:slug" element={<CategoryProducts />} />
+
+      {/* Auth page - redirect to home if already logged in */}
+      <Route 
+        path="/auth" 
+        element={isLoggedIn ? <Navigate to="/" replace /> : <LoginSignup onLogin={() => setIsLoggedIn(true)} />} 
+      />
+
+      {/* Protected routes - require login */}
+      <Route 
+        path="/wishlist" 
+        element={
+          <ProtectedRoute>
+            <WishlistPage />
+          </ProtectedRoute>
+        } 
+      />
     </Routes>
   );
 }

@@ -3,11 +3,19 @@ import SearchBar from "../components/SearchBar";
 import CategoryCard from "../components/CategoryCard";
 import Recommendations from "../components/Recommendations";
 import { categories } from "../data/categories";
+import { useEffect, useState } from "react";
 
 export default function Home() {
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/products")
+      .then((res) => res.json())
+      .then((data) => setProducts(data));
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#eaf7ff]">
-
       <Navbar />
 
       <div className="max-w-7xl mx-auto px-6 mt-12 flex gap-10">
@@ -61,7 +69,7 @@ export default function Home() {
             Recommendations
           </h2>
 
-          <Recommendations />
+          <Recommendations products={products} />
         </div>
 
       </div>
