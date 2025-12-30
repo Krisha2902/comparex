@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import PriceTable from "../components/PriceTable";
 import PriceHistory from "../components/PriceHistory";
@@ -8,9 +9,31 @@ export default function ProductPage() {
   const [params] = useSearchParams();
   const query = params.get("query");
 
+  const [products, setProducts] = useState([]);
+
+  const [loading, setLoading] = useState(false);
+
+
   // Temporary placeholder image (backend ke baad API se aayega)
   const productImage =
     "https://dummyimage.com/300x300/e6f2ff/1d4ed8&text=Product+Image";
+
+
+    useEffect(() => {
+  if (!query) return;
+
+  fetch(`http://localhost:5000/api/products?search=${query}`)
+    .then((res) => res.json())
+    .then((data) =>{ setProducts(data)
+      setLoading(false);
+    })
+    .catch((err) => {
+      console.error("API Error:", err);
+      setLoading(false);
+      setProducts([]);
+    });
+}, [query]);
+
 
   return (
     <div className="min-h-screen bg-[#f3f9fd]">
@@ -56,14 +79,28 @@ export default function ProductPage() {
           </div>
         </div>
 
+        {loading && (
+          <p className="text-center text-gray-500 mt-6">
+            Searching best prices...
+           </p>
+        )}
+
+        {!loading && products.length === 0 && (
+           <p className="text-center text-gray-500 mt-6">
+            No products found for “{query}”
+          </p>
+        )}
+
+
+
         {/* PRICE TABLE */}
-        <PriceTable />
+        <PriceTable products={products}/>
 
         {/* PRICE HISTORY */}
-        <PriceHistory />
+        <PriceHistory products={products}/>
 
         {/* SIMILAR PRODUCTS */}
-        <SimilarProducts />
+        <SimilarProducts products={products}/>
       </div>
     </div>
   );

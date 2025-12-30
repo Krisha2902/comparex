@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { recommendations } from "../data/recommendations";
+// import { recommendations } from "../data/recommendations";
 import RecommendationCard from "./RecommendationCard";
 
-export default function Recommendations() {
+export default function Recommendations({products}) {
   const scrollRef = useRef(null);
 
   const CARD_WIDTH = 260;
@@ -44,7 +44,7 @@ export default function Recommendations() {
           no-scrollbar
         "
       >
-        {recommendations.map((item) => (
+        {products.map((item) => (
           <RecommendationCard key={item.id} item={item} />
         ))}
       </div>

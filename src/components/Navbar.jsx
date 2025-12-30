@@ -1,8 +1,33 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import logo from "../assets/valuevue-logo.jpg";
 import { UserCircleIcon } from "@heroicons/react/24/solid";
 
-export default function Navbar() {
+export default function Navbar({ onLoginClick }) {
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Listen for storage changes
+    const handleStorageChange = () => {
+      setIsLoggedIn(!!localStorage.getItem("token"));
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    // Also check on mount
+    setIsLoggedIn(!!localStorage.getItem("token"));
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setIsLoggedIn(false);
+    navigate("/");
+  };
+
   return (
     <div className="bg-gradient-to-r from-[#cfeeff] to-[#b8ecff]">
       <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -47,12 +72,30 @@ export default function Navbar() {
           </li>
         </ul>
 
-        {/* RIGHT LOGIN */}
+        {/* RIGHT LOGIN/LOGOUT */}
         <div className="flex items-center gap-3">
-          <Link to="/auth" className="text-sm font-medium hover:text-blue-600">
-          Login / Signup
-          </Link>
-          <UserCircleIcon className="w-8 h-8 text-blue-600" />
+          {isLoggedIn ? (
+            <>
+              <button
+                onClick={handleLogout}
+                className="text-sm font-medium hover:text-blue-600"
+              >
+                Logout
+              </button>
+              <UserCircleIcon className="w-8 h-8 text-blue-600" />
+            </>
+          ) : (
+            <>
+              <Link 
+                to="/auth" 
+                className="text-sm font-medium hover:text-blue-600"
+                onClick={onLoginClick}
+              >
+                Login / Signup
+              </Link>
+              <UserCircleIcon className="w-8 h-8 text-blue-600" />
+            </>
+          )}
         </div>
       </nav>
     </div>
