@@ -11,6 +11,10 @@ import LoginSignup from "./pages/LoginSignup";
 import NetworkLoader from "./components/NetworkLoader";
 import CategoryProducts from "./pages/CategoryProducts";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminProtectedRoute from "./components/AdminProtectedRoute";
+import AdminLogin from "./pages/AdminLogin";
+import Dashboard from "./pages/Dashboard";
+import ManageProducts from "./pages/ManageProducts";
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -67,7 +71,25 @@ export default function App() {
           <ProtectedRoute>
             <WishlistPage />
           </ProtectedRoute>
-        } 
+        } />
+
+      {/* Admin/Dashboard routes - accessible to all logged-in users */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/products"
+        element={
+          <ProtectedRoute>
+            <ManageProducts />
+          </ProtectedRoute>
+        }
       />
     </Routes>
   );

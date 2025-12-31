@@ -18,10 +18,62 @@ exports.getProducts = async (req, res) => {
 // ADD product
 exports.addProduct = async (req, res) => {
   try {
-    const product = await Product.create(req.body);
-    res.json(product);
+    const { title, price, image, rating, source } = req.body;
+
+    // Validate required fields
+    if (!title || price === undefined || price === null) {
+      return res.status(400).json({ 
+        message: "Title and Price are required fields" 
+      });
+    }
+
+    // Ensure price is a number
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      return res.status(400).json({ 
+        message: "Price must be a valid positive number" 
+      });
+    }
+
+    // Validate rating if provided
+    if (rating !== undefined && rating !== null) {
+      const ratingNum = parseFloat(rating);
+      if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+        return res.status(400).json({ 
+          message: "Rating must be between 0 and 5" 
+        });
+      }
+    }
+
+    const productData = {
+      title: title.trim(),
+      price: priceNum,
+      image: image ? image.trim() : "",
+      rating: rating ? parseFloat(rating) : 0,
+      source: source ? source.trim() : "",
+    };
+
+    const product = await Product.create(productData);
+    res.status(201).json(product);
   } catch (error) {
-    res.status(500).json({ message: "Error adding product" });
+    console.error("Error adding product:", error);
+    res.status(500).json({ 
+      message: error.message || "Error adding product",
+      error: error.message 
+    });
+  }
+};
+
+// DELETE product
+exports.deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    res.json({ message: "Product deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting product" });
   }
 };
 

@@ -45,7 +45,7 @@ export default function Recommendations({products}) {
         "
       >
         {products.map((item) => (
-          <RecommendationCard key={item.id} item={item} />
+          <RecommendationCard key={item._id || item.id} item={item} />
         ))}
       </div>
     </div>
