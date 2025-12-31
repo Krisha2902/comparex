@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 
+// Protected route for regular users
 export default function ProtectedRoute({ children }) {
   const isLoggedIn = localStorage.getItem("token");
   const location = useLocation();
@@ -11,4 +12,3 @@ export default function ProtectedRoute({ children }) {
 
   return children;
 }
-

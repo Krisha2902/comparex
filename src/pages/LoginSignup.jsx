@@ -39,7 +39,12 @@ export default function LoginSignup({ onLogin }) {
           body: JSON.stringify({ name, email, password }),
         });
 
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonError) {
+          throw new Error(`Server error: ${res.status} ${res.statusText}`);
+        }
 
         if (res.ok) {
           alert("Signup successful! Please login.");
@@ -65,7 +70,12 @@ export default function LoginSignup({ onLogin }) {
           body: JSON.stringify({ email, password }),
         });
 
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonError) {
+          throw new Error(`Server error: ${res.status} ${res.statusText}`);
+        }
 
         if (res.ok && data.token) {
           localStorage.setItem("token", data.token);
@@ -77,8 +87,12 @@ export default function LoginSignup({ onLogin }) {
         }
       }
     } catch (error) {
-      alert("Network error. Please try again.");
-      console.error(error);
+      console.error("Error details:", error);
+      if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        alert("Cannot connect to server. Please make sure the backend server is running on http://localhost:5000");
+      } else {
+        alert(error.message || "Network error. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
