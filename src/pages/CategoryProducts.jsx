@@ -1,14 +1,34 @@
 import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
-import { products } from "../data/products";
+import { categories } from "../data/categories";
 
 export default function CategoryProducts() {
   const { slug } = useParams();
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredProducts = products.filter(
-    (p) => p.category === slug
-  );
+  // Get category name from slug for display
+  const category = categories.find((cat) => cat.slug === slug);
+  const categoryName = category ? category.name : slug;
+
+  useEffect(() => {
+    if (!slug) return;
+
+    setLoading(true);
+    fetch(`http://localhost:5000/api/products/category/${slug}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setFilteredProducts(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching products:", err);
+        setFilteredProducts([]);
+        setLoading(false);
+      });
+  }, [slug]);
 
   return (
     <div className="min-h-screen bg-[#f3f9fd]">
@@ -18,10 +38,10 @@ export default function CategoryProducts() {
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-blue-600 capitalize">
-            {slug} Products
+            {categoryName} Products
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Showing {filteredProducts.length} results
+            {loading ? "Loading..." : `Showing ${filteredProducts.length} results`}
           </p>
         </div>
 
@@ -50,14 +70,18 @@ export default function CategoryProducts() {
 
           {/* PRODUCTS GRID */}
           <div className="col-span-9">
-            {filteredProducts.length === 0 ? (
+            {loading ? (
+              <div className="bg-white rounded-xl p-8 text-center text-slate-500">
+                Loading products...
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="bg-white rounded-xl p-8 text-center text-slate-500">
                 No products available in this category.
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-6">
                 {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product._id || product.id} product={product} />
                 ))}
               </div>
             )}

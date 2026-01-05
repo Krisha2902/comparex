@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { Link } from "react-router-dom";
+import { categories } from "../data/categories";
+import Navbar from "../components/Navbar";
 
 export default function ManageProducts() {
   const [products, setProducts] = useState([]);
@@ -8,8 +11,18 @@ export default function ManageProducts() {
   const [source, setSource] = useState("");
   const [image, setImage] = useState("");
   const [rating, setRating] = useState("");
+  const [category, setCategory] = useState("");
 
-  const token = localStorage.getItem("token");
+  const [token, setToken] = useState(localStorage.getItem("token"));
+
+  // Update token when storage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setToken(localStorage.getItem("token"));
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   const fetchProducts = async () => {
     try {
@@ -18,27 +31,48 @@ export default function ManageProducts() {
       setProducts(res.data);
     } catch (error) {
       console.error("Error fetching products:", error);
-      alert("Failed to load products");
+      let errorMessage = "Failed to load products";
+      
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error') || !error.response) {
+        errorMessage = "Cannot connect to server. Please make sure:\n1. Backend server is running on http://localhost:5000\n2. MongoDB is connected\n3. Check console for errors";
+      } else if (error.response) {
+        errorMessage = `Server error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+      }
+      
+      alert(errorMessage);
+      setProducts([]); // Set empty array on error
     }
   };
 
-  useEffect(() => { fetchProducts(); }, []);
+  useEffect(() => { 
+    fetchProducts(); 
+    setToken(localStorage.getItem("token"));
+  }, []);
 
-  const handleAdd = async () => {
-    if (!title || !price || !image || !rating) {
-      alert("Please fill Title, Price, Image, and Rating fields");
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    
+    if (!token) {
+      alert("Please login first to add products!");
       return;
     }
+
+    if (!title || !price || !image || !rating || !category) {
+      alert("Please fill all required fields: Title, Price, Image, Rating, and Category");
+      return;
+    }
+    
     try {
       const productData = {
         title: title.trim(),
         price: parseFloat(price),
         image: image.trim(),
         rating: parseFloat(rating),
+        category: category.trim(),
       };
       
       // Add source only if provided
-      if (source.trim()) {
+      if (source && source.trim()) {
         productData.source = source.trim();
       }
 
@@ -50,98 +84,155 @@ export default function ManageProducts() {
       
       if (res.data) {
         alert("Product added successfully!");
-        setTitle(""); setPrice(""); setSource(""); setImage(""); setRating("");
+        setTitle(""); setPrice(""); setSource(""); setImage(""); setRating(""); setCategory("");
         fetchProducts();
       }
     } catch (error) {
       console.error("Error adding product:", error);
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          "Failed to add product. Please check all fields.";
+      let errorMessage = "Failed to add product. Please check all fields.";
+      
+      if (error.response) {
+        if (error.response.status === 401 || error.response.status === 403) {
+          errorMessage = "Authentication failed. Please login again.";
+          localStorage.removeItem("token");
+        } else {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        errorMessage;
+        }
+      } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        errorMessage = "Cannot connect to server. Please make sure the backend server is running on http://localhost:5000";
+      }
+      
       alert(errorMessage);
     }
   };
 
   const handleDelete = async (id) => {
+    if (!token) {
+      alert("Please login first to delete products!");
+      return;
+    }
+
     if (!window.confirm("Are you sure you want to delete this product?")) {
       return;
     }
+    
     try {
       await axios.delete(`http://localhost:5000/api/products/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      alert("Product deleted successfully!");
       fetchProducts();
     } catch (error) {
       console.error("Error deleting product:", error);
-      alert(error.response?.data?.message || "Failed to delete product");
+      let errorMessage = "Failed to delete product";
+      
+      if (error.response) {
+        if (error.response.status === 401 || error.response.status === 403) {
+          errorMessage = "Authentication failed. Please login again.";
+          localStorage.removeItem("token");
+        } else {
+          errorMessage = error.response.data?.message || errorMessage;
+        }
+      } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        errorMessage = "Cannot connect to server. Please make sure the backend server is running on http://localhost:5000";
+      }
+      
+      alert(errorMessage);
     }
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Manage Products</h1>
+    <div className="min-h-screen bg-[#f3f9fd]">
+      <Navbar />
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <h1 className="text-3xl font-bold mb-6 text-blue-600">Manage Products</h1>
 
-      <div className="mb-6 bg-white p-4 rounded-lg shadow-sm">
+      <div className="mb-6 bg-white p-6 rounded-xl shadow-sm">
         <h2 className="text-xl font-semibold mb-4">Add New Product</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-          <input 
-            type="text" 
-            placeholder="Product Title" 
-            value={title} 
-            onChange={(e)=>setTitle(e.target.value)} 
-            className="border p-2 rounded"
-            required
-          />
-          <input 
-            type="number" 
-            placeholder="Price (₹)" 
-            value={price} 
-            onChange={(e)=>setPrice(e.target.value)} 
-            className="border p-2 rounded"
-            required
-          />
-          <input 
-            type="text" 
-            placeholder="Source (Optional - Amazon/Flipkart)" 
-            value={source} 
-            onChange={(e)=>setSource(e.target.value)} 
-            className="border p-2 rounded"
-          />
-          <input 
-            type="url" 
-            placeholder="Image URL" 
-            value={image} 
-            onChange={(e)=>setImage(e.target.value)} 
-            className="border p-2 rounded col-span-2"
-            required
-          />
-          <input 
-            type="number" 
-            placeholder="Rating (0-5)" 
-            value={rating} 
-            onChange={(e)=>setRating(e.target.value)} 
-            min="0"
-            max="5"
-            step="0.1"
-            className="border p-2 rounded"
-            required
-          />
-        </div>
-        <button 
-          onClick={handleAdd} 
-          className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 transition"
-        >
-          Add Product
-        </button>
+        {!token && (
+          <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+            Please login to add products. <Link to="/auth" className="underline font-medium">Login here</Link>
+          </div>
+        )}
+        <form onSubmit={handleAdd}>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+            <input 
+              type="text" 
+              placeholder="Product Title" 
+              value={title} 
+              onChange={(e)=>setTitle(e.target.value)} 
+              className="border p-2 rounded"
+              required
+            />
+            <input 
+              type="number" 
+              placeholder="Price (₹)" 
+              value={price} 
+              onChange={(e)=>setPrice(e.target.value)} 
+              className="border p-2 rounded"
+              required
+              min="0"
+              step="0.01"
+            />
+            <select
+              value={category}
+              onChange={(e)=>setCategory(e.target.value)}
+              className="border p-2 rounded"
+              required
+            >
+              <option value="">Select Category</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <input 
+              type="text" 
+              placeholder="Source (Optional - Amazon/Flipkart)" 
+              value={source} 
+              onChange={(e)=>setSource(e.target.value)} 
+              className="border p-2 rounded"
+            />
+            <input 
+              type="url" 
+              placeholder="Image URL" 
+              value={image} 
+              onChange={(e)=>setImage(e.target.value)} 
+              className="border p-2 rounded"
+              required
+            />
+            <input 
+              type="number" 
+              placeholder="Rating (0-5)" 
+              value={rating} 
+              onChange={(e)=>setRating(e.target.value)} 
+              min="0"
+              max="5"
+              step="0.1"
+              className="border p-2 rounded"
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            disabled={!token}
+            className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Add Product
+          </button>
+        </form>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full border-collapse">
           <thead className="bg-gray-50">
             <tr>
               <th className="border p-3 text-left">Image</th>
               <th className="border p-3 text-left">Title</th>
+              <th className="border p-3 text-left">Category</th>
               <th className="border p-3 text-left">Price</th>
               <th className="border p-3 text-left">Rating</th>
               <th className="border p-3 text-left">Source</th>
@@ -161,6 +252,11 @@ export default function ManageProducts() {
                   )}
                 </td>
                 <td className="border p-3 font-medium">{p.title}</td>
+                <td className="border p-3">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                    {p.category || "Uncategorized"}
+                  </span>
+                </td>
                 <td className="border p-3 text-blue-600 font-semibold">₹{p.price}</td>
                 <td className="border p-3">
                   {p.rating ? (
@@ -185,6 +281,7 @@ export default function ManageProducts() {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

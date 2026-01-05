@@ -10,8 +10,18 @@ export default function Home() {
 
   useEffect(() => {
     fetch("http://localhost:5000/api/products")
-      .then((res) => res.json())
-      .then((data) => setProducts(data));
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => setProducts(data))
+      .catch((err) => {
+        console.error("Error fetching products:", err);
+        // Silently fail for home page - don't show alert
+        setProducts([]);
+      });
   }, []);
 
   return (

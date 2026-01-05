@@ -15,6 +15,8 @@ import AdminProtectedRoute from "./components/AdminProtectedRoute";
 import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import ManageProducts from "./pages/ManageProducts";
+import Comparepage from "./pages/comparepage";
+
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -27,17 +29,23 @@ export default function App() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // Listen for storage changes to update login state
-    const handleStorageChange = () => {
+    // Check login state periodically and on storage changes
+    const checkLoginState = () => {
       setIsLoggedIn(!!localStorage.getItem("token"));
     };
 
-    window.addEventListener("storage", handleStorageChange);
+    // Listen for storage changes (works across tabs)
+    window.addEventListener("storage", checkLoginState);
+    
+    // Also check on mount and periodically (for same-tab changes)
+    checkLoginState();
+    const interval = setInterval(checkLoginState, 1000);
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("storage", checkLoginState);
+      clearInterval(interval);
     };
   }, []);
 
@@ -51,6 +59,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
 
       {/* Public pages */}
+      <Route path="/compare" element={<Comparepage />} />
       <Route path="/categories" element={<CategoryPage />} />
       <Route path="/categories/:slug" element={<CategoryProducts />} />
       <Route path="/product" element={<ProductPage />} />
@@ -61,7 +70,18 @@ export default function App() {
       {/* Auth page - redirect to home if already logged in */}
       <Route 
         path="/auth" 
-        element={isLoggedIn ? <Navigate to="/" replace /> : <LoginSignup onLogin={() => setIsLoggedIn(true)} />} 
+        element={
+          isLoggedIn ? (
+            <Navigate to="/" replace />
+          ) : (
+            <LoginSignup 
+              onLogin={() => {
+                setIsLoggedIn(true);
+                window.dispatchEvent(new Event('storage'));
+              }} 
+            />
+          )
+        } 
       />
 
       {/* Protected routes - require login */}

@@ -6,6 +6,10 @@ const productSchema = new mongoose.Schema({
   image: { type: String, default: "" },
   rating: { type: Number, default: 0, min: 0, max: 5 },
   source: { type: String, default: "" }, // Amazon / Flipkart
+  category: {
+    type: String,
+    required: true
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", productSchema);

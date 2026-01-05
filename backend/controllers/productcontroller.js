@@ -18,13 +18,18 @@ exports.getProducts = async (req, res) => {
 // ADD product
 exports.addProduct = async (req, res) => {
   try {
-    const { title, price, image, rating, source } = req.body;
+    const { title, price, image, rating, source, category } = req.body;
 
     // Validate required fields
     if (!title || price === undefined || price === null) {
       return res.status(400).json({ 
         message: "Title and Price are required fields" 
       });
+    }
+
+    // Validate category if provided
+    if (category && category.trim()) {
+      // Category is optional but if provided, should be valid
     }
 
     // Ensure price is a number
@@ -51,6 +56,7 @@ exports.addProduct = async (req, res) => {
       image: image ? image.trim() : "",
       rating: rating ? parseFloat(rating) : 0,
       source: source ? source.trim() : "",
+      category: category ? category.trim() : "Uncategorized",
     };
 
     const product = await Product.create(productData);
@@ -61,6 +67,39 @@ exports.addProduct = async (req, res) => {
       message: error.message || "Error adding product",
       error: error.message 
     });
+  }
+};
+
+// GET products by category
+exports.getProductsByCategory = async (req, res) => {
+  try {
+    const { categorySlug } = req.params;
+    
+    // Map slug to category name (case-insensitive matching)
+    const categoryMap = {
+      "electronics": "Electronics",
+      "fashion": "Fashion",
+      "kitchen": "Kitchen",
+      "home": "Home",
+      "vehicle": "Vehicle",
+      "sports": "Sports",
+      "toys-games": "Toys & Games",
+      "books": "Books",
+      "automotive": "Automotive"
+    };
+
+    // Get category name from slug, or use slug itself if not found
+    const categoryName = categoryMap[categorySlug.toLowerCase()] || categorySlug;
+    
+    // Search for products matching category (case-insensitive)
+    const products = await Product.find({
+      category: { $regex: new RegExp(`^${categoryName}$`, "i") }
+    });
+
+    res.json(products);
+  } catch (error) {
+    console.error("Error fetching products by category:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

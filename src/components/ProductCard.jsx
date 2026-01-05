@@ -48,7 +48,7 @@ export default function ProductCard({ product }) {
       )}
 
       <button
-        onClick={() => navigate(`/product/${productId}`)}
+        onClick={() => navigate(`/compare?q=${encodeURIComponent(productName)}`)}
         className="mt-3 w-full text-sm py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition font-medium"
       >
         Compare Price
