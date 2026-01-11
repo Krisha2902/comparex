@@ -19,19 +19,30 @@ class RelianceSearchScraper extends BaseSearchScraper {
             const searchUrl = this.buildSearchUrl(query, options.category);
             page = await this.getPage(searchUrl);
 
-            // Check for bot detection/CAPTCHA
+            // Check for bot detection/CAPTCHA - comprehensive checks
             const pageContent = await page.content();
-            if (pageContent.includes('Access Denied') ||
-                pageContent.includes('security check') ||
-                pageContent.includes('captcha')) {
-                console.error('❌ Reliance search bot detection triggered');
-                throw new Error('PLATFORM_BLOCKED: Reliance Digital has blocked this request. Please try again later.');
+            const botDetectionPatterns = [
+                'Access Denied',
+                'security check',
+                'captcha',
+                'bot check',
+                'unusual traffic',
+                'verify you are human',
+                'robot',
+                'not automated'
+            ];
+
+            for (const pattern of botDetectionPatterns) {
+                if (pageContent.toLowerCase().includes(pattern.toLowerCase())) {
+                    console.error(`❌ Reliance search bot detection triggered: ${pattern}`);
+                    throw new Error('PLATFORM_BLOCKED: Reliance Digital has blocked this request. Please try again later.');
+                }
             }
 
             await this.takeScreenshot(page, `reliance_search_${Date.now()}.png`);
 
-            // Wait for page to fully load - Reliance can be slow
-            await new Promise(resolve => setTimeout(resolve, 6000));
+            // Wait for page to fully load - Reliance can be slow (with jitter)
+            await new Promise(resolve => setTimeout(resolve, 6000 + Math.random() * 3000));
 
             const results = await page.evaluate(() => {
                 const products = [];

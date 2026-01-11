@@ -18,18 +18,30 @@ class FlipkartSearchScraper extends BaseSearchScraper {
             const searchUrl = this.buildSearchUrl(query, options.category);
             page = await this.getPage(searchUrl);
 
-            // Check for bot detection/CAPTCHA
+            // Check for bot detection/CAPTCHA - comprehensive checks
             const pageContent = await page.content();
-            if (pageContent.includes('Access Denied') ||
-                pageContent.includes('security check') ||
-                pageContent.includes('Pardon the interruption')) {
-                console.error('❌ Flipkart search bot detection triggered');
-                throw new Error('PLATFORM_BLOCKED: Flipkart has blocked this request. Please try again later.');
+            const botDetectionPatterns = [
+                'Access Denied',
+                'security check',
+                'Pardon the interruption',
+                'bot check',
+                'unusual traffic',
+                'verify you are human',
+                'robot',
+                'captcha',
+                'not automated'
+            ];
+
+            for (const pattern of botDetectionPatterns) {
+                if (pageContent.toLowerCase().includes(pattern.toLowerCase())) {
+                    console.error(`❌ Flipkart search bot detection triggered: ${pattern}`);
+                    throw new Error('PLATFORM_BLOCKED: Flipkart has blocked this request. Please try again later.');
+                }
             }
 
             await this.takeScreenshot(page, `flipkart_search_${Date.now()}.png`);
 
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 3000)); // Random jitter
 
             const results = await page.evaluate(() => {
                 const products = [];

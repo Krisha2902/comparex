@@ -221,18 +221,39 @@ async function runScrapers(jobId, query, category) {
 
     console.log(`Job ${jobId}: Unique products after dedup: ${uniqueProducts.length}`);
 
+    // Limit to top 5 results per source (website)
+    const sourceMap = {};
+    const topProductsPerSource = [];
+    const MAX_PER_SOURCE = 5;
+
+    for (const product of uniqueProducts) {
+      const source = product.source || 'unknown';
+      if (!sourceMap[source]) {
+        sourceMap[source] = [];
+      }
+      if (sourceMap[source].length < MAX_PER_SOURCE) {
+        sourceMap[source].push(product);
+        topProductsPerSource.push(product);
+      }
+    }
+
+    console.log(`Job ${jobId}: After limiting to top ${MAX_PER_SOURCE} per source: ${topProductsPerSource.length} products`);
+    Object.entries(sourceMap).forEach(([source, products]) => {
+      console.log(`  ${source}: ${products.length}/${MAX_PER_SOURCE}`);
+    });
+
     // Apply relevance ranking with accessory filtering
     const { sortByRelevance } = require('../utils/relevanceScorer');
 
     console.log(`Job ${jobId}: Applying relevance ranking for query: "${query}", category: "${category || 'auto'}"`);
 
-    const rankedProducts = sortByRelevance(uniqueProducts, query, category, {
+    const rankedProducts = sortByRelevance(topProductsPerSource, query, category, {
       minScore: -20,  // Filter out products with very low relevance
       includeScore: false,  // Don't include score in output
       secondarySortByPrice: true  // Use price as tiebreaker
     });
 
-    console.log(`Job ${jobId}: After relevance filtering: ${rankedProducts.length} products (filtered ${uniqueProducts.length - rankedProducts.length} irrelevant/accessories)`);
+    console.log(`Job ${jobId}: After relevance filtering: ${rankedProducts.length} products (filtered ${topProductsPerSource.length - rankedProducts.length} irrelevant/accessories)`);
 
     job.results = rankedProducts;
     job.status = "completed";
