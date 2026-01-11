@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import DealCard from "../components/DealCard";
+import API_BASE_URL from "../config/api";
 
 export default function SmartDeals() {
   const [deals, setDeals] = useState([]);
@@ -8,7 +9,7 @@ export default function SmartDeals() {
 
   useEffect(() => {
     // Fetch products from API - we'll show them as "deals"
-    fetch("http://localhost:5000/api/products")
+    fetch(`${API_BASE_URL}/api/products`)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);

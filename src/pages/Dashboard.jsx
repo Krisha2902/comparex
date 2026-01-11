@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import API_BASE_URL from "../config/api";
 
 export default function Dashboard() {
 
@@ -9,7 +10,7 @@ export default function Dashboard() {
 
   //  FETCH ALERTS (YAHI ADD KARNA THA)
   useEffect(() => {
-    fetch("http://localhost:5000/api/alerts/user/123")
+    fetch(`${API_BASE_URL}/api/alerts/user/123`)
       .then((res) => res.json())
       .then((data) => setAlerts(data))
       .catch((err) => console.error("Alert fetch error:", err));

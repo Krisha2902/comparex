@@ -83,8 +83,8 @@ class AmazonSearchScraper extends BaseSearchScraper {
                         }
 
                         // Rating - try to extract from stars
-                        let ratingVal = 0;
-                        let ratingCount = 0;
+                        let ratingVal = null;
+                        let ratingCount = null;
                         const ratingEl = card.querySelector('.a-star-small span.a-icon-alt, i.a-icon-star span.a-icon-alt');
                         if (ratingEl) {
                             const ratingText = ratingEl.innerText || ratingEl.textContent;

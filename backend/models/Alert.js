@@ -8,7 +8,7 @@ const priceAlertSchema = new mongoose.Schema({
   },
   userPhone: {
     type: String,
-    required: true,
+    required: false,
     trim: true
   },
   productName: {

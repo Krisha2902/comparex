@@ -54,7 +54,7 @@ exports.addProduct = async (req, res) => {
       title: title.trim(),
       price: priceNum,
       image: image ? image.trim() : "",
-      rating: rating ? parseFloat(rating) : 0,
+      rating: rating ? parseFloat(rating) : null,
       source: source ? source.trim() : "",
       category: category ? category.trim() : "Uncategorized",
     };

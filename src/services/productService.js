@@ -1,7 +1,8 @@
 import axios from "axios";
+import API_BASE_URL from "../config/api";
 
 // Use environment variable for API URL with fallback for development
-const API_Base = import.meta.env.VITE_API_URL || "http://localhost:5000/api/search";
+const API_Base = `${API_BASE_URL}/api/search`;
 
 export const searchProducts = async (query, category = "electronics") => {
   try {

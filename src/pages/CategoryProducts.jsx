@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
 import { categories } from "../data/categories";
+import API_BASE_URL from "../config/api";
 
 export default function CategoryProducts() {
   const { slug } = useParams();
@@ -17,7 +18,7 @@ export default function CategoryProducts() {
     if (!slug) return;
 
     setLoading(true);
-    fetch(`http://localhost:5000/api/products/category/${slug}`)
+    fetch(`${API_BASE_URL}/api/products/category/${slug}`)
       .then((res) => res.json())
       .then((data) => {
         setFilteredProducts(data);

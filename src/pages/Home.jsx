@@ -4,12 +4,13 @@ import CategoryCard from "../components/CategoryCard";
 import Recommendations from "../components/Recommendations";
 import { categories } from "../data/categories";
 import { useEffect, useState } from "react";
+import API_BASE_URL from "../config/api";
 
 export default function Home() {
   const [products, setProducts] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/products")
+    fetch(`${API_BASE_URL}/api/products`)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);

@@ -7,6 +7,7 @@ router.post("/create", async (req, res) => {
       userEmail,
       userPhone,
       productName,
+      productUrl,
       store,
       stores,
       targetPrice
@@ -58,6 +59,18 @@ router.post("/create", async (req, res) => {
       });
     }
 
+    // ProductUrl validation if provided
+    if (productUrl && productUrl.trim()) {
+      try {
+        new URL(productUrl.trim()); // Validate URL format
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product URL format"
+        });
+      }
+    }
+
     // Handle stores (ensure it's an array)
     let storesArray = [];
     if (Array.isArray(stores)) {
@@ -71,6 +84,7 @@ router.post("/create", async (req, res) => {
       userEmail: userEmail.trim(),
       userPhone: userPhone.trim(),
       productName: productName.trim(),
+      productUrl: productUrl ? productUrl.trim() : undefined,
       stores: storesArray,
       targetPrice,
       isTriggered: false

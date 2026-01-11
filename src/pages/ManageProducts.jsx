@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { categories } from "../data/categories";
 import Navbar from "../components/Navbar";
 import OptimizedImage from "../components/OptimizedImage";
+import API_BASE_URL from "../config/api";
 
 export default function ManageProducts() {
   const [products, setProducts] = useState([]);
@@ -28,7 +29,7 @@ export default function ManageProducts() {
   const fetchProducts = async () => {
     try {
       // GET is public, no auth needed
-      const res = await axios.get("http://localhost:5000/api/products");
+      const res = await axios.get(`${API_BASE_URL}/api/products`);
       setProducts(res.data);
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -78,7 +79,7 @@ export default function ManageProducts() {
       }
 
       const res = await axios.post(
-        "http://localhost:5000/api/products",
+        `${API_BASE_URL}/api/products`,
         productData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -120,7 +121,7 @@ export default function ManageProducts() {
     }
 
     try {
-      await axios.delete(`http://localhost:5000/api/products/${id}`, {
+      await axios.delete(`${API_BASE_URL}/api/products/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert("Product deleted successfully!");
