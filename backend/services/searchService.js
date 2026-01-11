@@ -132,7 +132,7 @@ async function runScrapers(jobId, query, category) {
 
         // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout: ${scraper.platform} took too long`)), 40000)
+          setTimeout(() => reject(new Error(`Timeout: ${scraper.platform} took too long`)), 50000)
         );
 
         // Race between scraper and timeout — pass category through

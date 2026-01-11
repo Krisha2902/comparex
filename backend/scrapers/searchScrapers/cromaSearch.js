@@ -17,7 +17,18 @@ class CromaSearchScraper extends BaseSearchScraper {
         let page = null;
         try {
             const searchUrl = this.buildSearchUrl(query, options.category);
-            page = await this.getPage(searchUrl);
+            console.log(`[croma] Navigating to: ${searchUrl}`);
+            
+            // Use direct page.goto for faster loading with domcontentloaded
+            page = await this.browserManager.newPage();
+            try {
+                await page.goto(searchUrl, {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 25000
+                });
+            } catch (err) {
+                console.warn(`[croma] Navigation timeout, continuing with partial page...`, err.message);
+            }
 
             // Check for bot detection/CAPTCHA - comprehensive checks
             const pageContent = await page.content();
@@ -41,7 +52,8 @@ class CromaSearchScraper extends BaseSearchScraper {
 
             await this.takeScreenshot(page, `croma_search_${Date.now()}.png`);
 
-            await new Promise(resolve => setTimeout(resolve, 6000 + Math.random() * 3000)); // Random jitter
+            // Shorter wait for page content to load
+            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
             const results = await page.evaluate(() => {
                 const products = [];
