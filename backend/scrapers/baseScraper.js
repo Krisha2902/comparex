@@ -49,11 +49,9 @@ class BaseScraper {
     async closePage(page) {
         if (page) {
             try {
-                const context = page.context();
                 await page.close();
-                await context.close();
             } catch (error) {
-                console.error('Error closing page/context:', error.message);
+                console.error('Error closing page:', error.message);
             }
         }
     }

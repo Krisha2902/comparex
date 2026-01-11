@@ -128,6 +128,15 @@ async function runScrapers(jobId, query, category) {
 
     while (attempt < maxRetries) {
       try {
+        // Get next proxy for this attempt to avoid IP blocking
+        const proxyManager = require('../utils/proxyManager');
+        if (proxyManager.hasProxies()) {
+          const nextProxy = proxyManager.getNextProxy();
+          console.log(`Job ${jobId}: ${scraper.platform} using proxy rotation attempt ${attempt + 1}`);
+          // Reinitialize browser with new proxy for each platform
+          await browserManager.init(nextProxy);
+        }
+
         console.log(`Job ${jobId}: Scraping ${scraper.platform}... (attempt ${attempt + 1})`);
 
         // Create a timeout promise

@@ -135,6 +135,27 @@ class BrowserManager {
                     const page = await this.browser.newPage();
                     console.log('✅ Page created');
 
+                    // Stealth mode - hide automation indicators
+                    await page.evaluateOnNewDocument(() => {
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => false,
+                        });
+                        Object.defineProperty(navigator, 'plugins', {
+                            get: () => [1, 2, 3, 4, 5],
+                        });
+                        Object.defineProperty(navigator, 'languages', {
+                            get: () => ['en-US', 'en'],
+                        });
+                        window.chrome = {
+                            runtime: {}
+                        };
+                        Object.defineProperty(navigator, 'permissions', {
+                            get: () => ({
+                                query: () => Promise.resolve({ state: Notification.permission })
+                            }),
+                        });
+                    });
+
                     // Optimize page loading
                     await page.setRequestInterception(true);
                     page.on('request', (req) => {
