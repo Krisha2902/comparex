@@ -9,7 +9,7 @@ class BrowserManager {
         this.currentProxy = null;
     }
 
-    async init(proxyUrl = null) {
+    async init(proxyUrl = null, retryAttempt = 0) {
         // Use provided proxy or get next proxy from proxy manager
         const proxy = proxyUrl || (proxyManager.hasProxies() ? proxyManager.getNextProxy() : null);
         
@@ -28,7 +28,7 @@ class BrowserManager {
                 }
             }
 
-            console.log(`Initializing browser${proxy ? ` with proxy: ${proxy.substring(0, 30)}...` : ' without proxy'}...`);
+            console.log(`Initializing browser${proxy ? ` with proxy: ${proxy.substring(0, 30)}...` : ' without proxy'}... (attempt ${retryAttempt + 1}/3)`);
             
             try {
                 const launchArgs = [
@@ -79,11 +79,25 @@ class BrowserManager {
 
                 console.log('✅ Browser initialized successfully');
             } catch (err) {
-                console.error('❌ Failed to initialize browser:', err.message);
+                console.error(`❌ Failed to initialize browser (attempt ${retryAttempt + 1}/3): ${err.message}`);
                 if (proxy) {
                     proxyManager.markProxyFailed(proxy);
                 }
-                throw err;
+                
+                // Exponential backoff retry logic
+                const maxRetries = 3;
+                if (retryAttempt < maxRetries - 1) {
+                    const delayMs = Math.pow(2, retryAttempt) * 1000; // 1s, 2s, 4s
+                    console.log(`⏳ Retrying browser initialization in ${delayMs}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    
+                    // Try with next proxy on retry
+                    const nextProxy = proxyManager.hasProxies() ? proxyManager.getNextProxy() : null;
+                    return this.init(nextProxy, retryAttempt + 1);
+                } else {
+                    console.error('❌ Browser initialization failed after 3 attempts');
+                    throw new Error(`Browser initialization failed after ${maxRetries} attempts: ${err.message}`);
+                }
             }
         }
         return this.browser;
@@ -102,15 +116,20 @@ class BrowserManager {
         }
     }
 
-    async newPage(url = null) {
+    async newPage(url = null, retryAttempt = 0) {
         // Queue page creation to avoid concurrent connection issues
         return new Promise(async (resolve, reject) => {
             const task = async () => {
                 try {
-                    // Ensure browser is initialized
+                    // Ensure browser is initialized - with retry logic
                     if (!this.browser || !this.browser.isConnected()) {
                         console.log('Browser disconnected, reinitializing...');
-                        await this.init();
+                        try {
+                            await this.init();
+                        } catch (err) {
+                            console.error('Failed to reinitialize browser:', err.message);
+                            throw err;
+                        }
                     }
 
                     const page = await this.browser.newPage();
@@ -147,14 +166,32 @@ class BrowserManager {
 
                     resolve(page);
                 } catch (err) {
-                    console.error('Error creating page:', err.message);
-                    reject(err);
-                } finally {
-                    this.isCreatingPage = false;
-                    // Process next task in queue
-                    if (this.pageCreationQueue.length > 0) {
-                        const nextTask = this.pageCreationQueue.shift();
-                        nextTask();
+                    console.error(`Error creating page (attempt ${retryAttempt + 1}/2): ${err.message}`);
+                    
+                    // Retry page creation once with exponential backoff
+                    const maxRetries = 2;
+                    if (retryAttempt < maxRetries - 1) {
+                        const delayMs = Math.pow(2, retryAttempt) * 500; // 500ms, 1s
+                        console.log(`⏳ Retrying page creation in ${delayMs}ms...`);
+                        
+                        this.isCreatingPage = false;
+                        // Process next task in queue
+                        if (this.pageCreationQueue.length > 0) {
+                            const nextTask = this.pageCreationQueue.shift();
+                            nextTask();
+                        }
+                        
+                        // Retry after delay
+                        await new Promise(resolve => setTimeout(resolve, delayMs));
+                        this.newPage(url, retryAttempt + 1).then(resolve).catch(reject);
+                    } else {
+                        this.isCreatingPage = false;
+                        // Process next task in queue
+                        if (this.pageCreationQueue.length > 0) {
+                            const nextTask = this.pageCreationQueue.shift();
+                            nextTask();
+                        }
+                        reject(err);
                     }
                 }
             };

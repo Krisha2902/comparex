@@ -242,6 +242,22 @@ async function runScrapers(jobId, query, category) {
       console.log(`  ${source}: ${products.length}/${MAX_PER_SOURCE}`);
     });
 
+    // Find best deal (lowest price)
+    let bestDealProduct = null;
+    let lowestPrice = Infinity;
+    for (const product of topProductsPerSource) {
+      if (product.price && product.price < lowestPrice) {
+        lowestPrice = product.price;
+        bestDealProduct = product;
+      }
+    }
+
+    if (bestDealProduct) {
+      console.log(`Job ${jobId}: Best deal found: "${bestDealProduct.title}" @ ₹${bestDealProduct.price} from ${bestDealProduct.source}`);
+      // Mark as best deal in product object
+      bestDealProduct.isBestDeal = true;
+    }
+
     // Apply relevance ranking with accessory filtering
     const { sortByRelevance } = require('../utils/relevanceScorer');
 
@@ -255,7 +271,19 @@ async function runScrapers(jobId, query, category) {
 
     console.log(`Job ${jobId}: After relevance filtering: ${rankedProducts.length} products (filtered ${topProductsPerSource.length - rankedProducts.length} irrelevant/accessories)`);
 
-    job.results = rankedProducts;
+    // Calculate discount percentage for each product
+    const productsWithDiscount = rankedProducts.map(product => {
+      if (product.originalPrice && product.price && product.originalPrice > product.price) {
+        const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
+        return {
+          ...product,
+          discountPercent: discount
+        };
+      }
+      return product;
+    });
+
+    job.results = productsWithDiscount;
     job.status = "completed";
     job.progress = job.results.length > 0
       ? `Found ${job.results.length} products`

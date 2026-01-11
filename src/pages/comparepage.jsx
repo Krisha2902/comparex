@@ -190,14 +190,23 @@ function ComparePage() {
                     {validProducts.map((p, index) => (
                       <div
                         key={`${p.source}-${index}`}
-                        className={`bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition ${index === 0 ? "ring-2 ring-green-500" : ""
+                        className={`bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition ${p.isBestDeal ? "ring-2 ring-green-500" : ""
                           }`}
                       >
                         {/* Best Deal Badge */}
-                        {index === 0 && (
+                        {p.isBestDeal && (
                           <div className="mb-3">
                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
                               🔥 Best Deal
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Discount Badge */}
+                        {p.discountPercent && p.discountPercent > 0 && (
+                          <div className="mb-2">
+                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-semibold">
+                              {p.discountPercent}% OFF
                             </span>
                           </div>
                         )}
@@ -216,10 +225,10 @@ function ComparePage() {
                           {p.title}
                         </h3>
 
-                        {p.rating > 0 && (
+                        {p.rating && p.rating > 0 && (
                           <div className="flex items-center gap-1 mb-2">
                             <span className="text-yellow-500 text-sm">★</span>
-                            <span className="text-xs text-gray-600">{p.rating}</span>
+                            <span className="text-xs text-gray-600">{p.rating.toFixed(1)}/5</span>
                           </div>
                         )}
 
@@ -228,6 +237,13 @@ function ComparePage() {
                             ₹{(p.price || 0).toLocaleString('en-IN')}
                           </p>
                         </div>
+
+                        {/* Original Price Strikethrough */}
+                        {p.originalPrice && p.originalPrice > p.price && (
+                          <p className="text-sm text-gray-400 line-through mb-3">
+                            ₹{(p.originalPrice || 0).toLocaleString('en-IN')}
+                          </p>
+                        )}
 
                         <div className="mt-3 pt-3 border-t">
                           <p className="text-xs text-gray-500">
