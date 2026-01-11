@@ -70,91 +70,105 @@ class CromaSearchScraper extends BaseSearchScraper {
             // Shorter wait for page content to load
             await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
+            // Check if page has actual content (not a block page)
+            const hasContent = await page.evaluate(() => {
+                // Check if product cards are present
+                const productCards = document.querySelectorAll('.product-item, li[class*="product"], [class*="product-card"]');
+                return productCards.length > 0;
+            });
+
+            if (!hasContent) {
+                console.log(`[croma] No product content detected, page might be blocked. Retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Try again with fresh page
+                throw new Error('BLOCKED: No product content detected on page');
+            }
+
             const results = await page.evaluate(() => {
                 const products = [];
 
-                // Try multiple selectors for Croma
-                let productCards = document.querySelectorAll('.product-item, li[class*="product"]');
-
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('[class*="product-card"], [class*="productCard"]');
-                }
-
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('li.MuiGrid-item, div[class*="productLi"]');
-                }
+                // Get all product cards from Croma
+                let productCards = document.querySelectorAll('.productCardImg, [class*="productImg"], li.MuiGrid-item, [class*="productCard"], .product-item');
 
                 console.log(`Croma found ${productCards.length} product cards`);
 
+                if (productCards.length === 0) {
+                    return products;
+                }
+
                 productCards.forEach((card, index) => {
                     try {
-                        // Title - try multiple selectors
-                        let titleEl = card.querySelector('.product-title a, h3 a, a[class*="title"]');
-                        if (!titleEl) titleEl = card.querySelector('a');
+                        // Extract data from card's text content (text mining approach)
+                        const cardText = card.innerText || card.textContent;
 
-                        if (!titleEl) {
-                            console.log(`Croma: No title found for card ${index}`);
+                        // Get title from link attribute or first line
+                        let title = '';
+                        const titleLink = card.querySelector('a[title]') || card.querySelector('a.productCardImg');
+                        if (titleLink) {
+                            title = titleLink.getAttribute('title') || titleLink.innerText;
+                        }
+                        if (!title) {
+                            const lines = cardText.split('\n').filter(l => l.trim());
+                            title = lines.length > 0 ? lines[0] : '';
+                        }
+
+                        if (!title) {
                             return;
                         }
 
-                        const title = titleEl.innerText.trim() || titleEl.getAttribute('title');
-                        let productUrl = titleEl.href;
-
-                        // Price
+                        // Extract prices - Croma uses ₹ or Rs. followed by amount
                         let currentPrice = null;
                         let originalPrice = null;
-                        const priceEl = card.querySelector('.amount, span[class*="price"], .new-price');
-                        if (priceEl) {
-                            const priceText = priceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (priceText) currentPrice = parseFloat(priceText);
+                        const priceMatch = cardText.match(/₹\s*([\d,]+)/);
+                        if (priceMatch) {
+                            currentPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
                         }
 
-                        // Original Price
-                        const originalPriceEl = card.querySelector('.old-price, .strikethrough-price, span[style*="text-decoration: line-through"]');
-                        if (originalPriceEl) {
-                            const originalText = originalPriceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (originalText) originalPrice = parseFloat(originalText);
+                        // Look for original price (second price if exists)
+                        const priceMatches = cardText.match(/₹\s*([\d,]+)/g);
+                        if (priceMatches && priceMatches.length >= 2) {
+                            originalPrice = parseFloat(priceMatches[1].replace(/₹|,/g, ''));
                         }
 
-                        // Rating - use null by default
-                        let ratingVal = null;
-                        let ratingCount = 0;
-                        const ratingEl = card.querySelector('[class*="rating"], [class*="stars"], .rating-info');
-                        if (ratingEl) {
-                            const ratingText = ratingEl.innerText || ratingEl.textContent;
-                            if (ratingText) {
-                                const match = ratingText.match(/(\d+\.?\d*)/);
-                                if (match) {
-                                    const rating = parseFloat(match[1]);
-                                    if (Number.isFinite(rating) && rating > 0 && rating <= 5) {
-                                        ratingVal = rating;
-                                    }
-                                }
+                        // Extract rating
+                        let rating = null;
+                        const ratingMatch = cardText.match(/(\d+\.?\d*)\s*(?:★|stars|out of)/);
+                        if (ratingMatch) {
+                            rating = parseFloat(ratingMatch[1]);
+                        }
+
+                        // Extract product URL
+                        let productUrl = '';
+                        const linkEl = card.querySelector('a[href]');
+                        if (linkEl) {
+                            productUrl = linkEl.href || '';
+                            if (!productUrl.startsWith('http')) {
+                                productUrl = 'https://www.croma.com' + productUrl;
                             }
                         }
 
-                        // Image - validate URL
+                        // Get image
+                        let imageUrl = '';
                         const imgEl = card.querySelector('img');
-                        let image = null;
-                        if (imgEl && imgEl.src && imgEl.src.startsWith('http')) {
-                            image = imgEl.src;
+                        if (imgEl) {
+                            imageUrl = imgEl.src || imgEl.getAttribute('data-src') || '';
                         }
 
-                        // Only add products with valid price and title
-                        if (title && productUrl && currentPrice !== null && currentPrice !== undefined) {
+                        // Only add if we have at least title and price
+                        if (title && currentPrice) {
                             products.push({
                                 title: title.trim(),
                                 price: currentPrice,
-                                originalPrice: originalPrice > currentPrice ? originalPrice : null,
-                                image: image,
-                                productUrl,
-                                source: 'Croma',
-                                rating: ratingVal,
+                                originalPrice: originalPrice || currentPrice,
+                                rating: rating || null,
+                                image: imageUrl,
+                                productUrl: productUrl || '',
                                 availability: true
                             });
                         }
-                    } catch (err) {
-                        console.error('Croma: Error parsing product card:', err.message);
+
+                    } catch (e) {
+                        console.log(`Error parsing card ${index}: ${e.message}`);
                     }
                 });
 

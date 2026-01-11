@@ -70,97 +70,108 @@ class FlipkartSearchScraper extends BaseSearchScraper {
             // Shorter wait for page content to load
             await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
+            // Check if page has actual content (not a block page)
+            const hasContent = await page.evaluate(() => {
+                // Check if product cards are present
+                const productCards = document.querySelectorAll('[data-id], ._1AtVbE, .cPHDOP, ._13oc-S');
+                return productCards.length > 0;
+            });
+
+            if (!hasContent) {
+                console.log(`[flipkart] No product content detected, page might be blocked. Retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Try again with fresh page
+                throw new Error('BLOCKED: No product content detected on page');
+            }
+
             const results = await page.evaluate(() => {
                 const products = [];
 
-                // Flipkart product cards - try multiple selectors
+                // Get all product cards
                 let productCards = document.querySelectorAll('[data-id]');
 
-                // Fallback: try common Flipkart containers
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('._1AtVbE, .cPHDOP, ._13oc-S');
-                }
+                console.log(`Found ${productCards.length} product cards`);
 
-                // Another fallback: divs with certain classes containing product info
                 if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('div[class*="yKfJKb"]');
+                    console.log('No product cards found');
+                    return products;
                 }
-
-                console.log(`Flipkart found ${productCards.length} product cards`);
 
                 productCards.forEach((card, index) => {
                     try {
-                        // Title - try multiple selectors
-                        let titleEl = card.querySelector('a[class*="IRpwTa"], a[class*="s1Q9rs"], a[class*="_2rpwqI"]');
-                        if (!titleEl) titleEl = card.querySelector('a[title]');
-                        if (!titleEl) titleEl = card.querySelector('a');
+                        // Extract data from card's text content (text mining approach)
+                        const cardText = card.innerText || card.textContent;
+                        const cardHTML = card.innerHTML;
 
-                        if (!titleEl) {
-                            console.log(`Flipkart: No title found for card ${index}`);
+                        // Get title from link
+                        let title = '';
+                        const titleLink = card.querySelector('a[title]');
+                        if (titleLink) {
+                            title = titleLink.getAttribute('title') || titleLink.innerText;
+                        } else {
+                            // Fallback: first line of text
+                            const lines = cardText.split('\n').filter(l => l.trim());
+                            title = lines.length > 0 ? lines[0] : '';
+                        }
+
+                        if (!title) {
+                            console.log(`No title for card ${index}`);
                             return;
                         }
 
-                        const title = titleEl.getAttribute('title') || titleEl.innerText.trim();
-                        let productUrl = titleEl.href;
-                        if (productUrl && !productUrl.startsWith('http')) {
-                            productUrl = 'https://www.flipkart.com' + productUrl;
-                        }
-
-                        // Price
+                        // Extract current price using regex: ₹XXXX or ₹X,XXX
+                        const currentPriceMatch = cardText.match(/₹([\d,]+)(?!\w)/);
                         let currentPrice = null;
+                        if (currentPriceMatch) {
+                            currentPrice = parseFloat(currentPriceMatch[1].replace(/,/g, ''));
+                        }
+
+                        // Extract original price (second price after first)
                         let originalPrice = null;
-                        const priceEl = card.querySelector('div[class*="Nx9bqj"]');
-                        if (priceEl) {
-                            const priceText = priceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (priceText) currentPrice = parseFloat(priceText);
+                        const priceMatches = cardText.match(/₹([\d,]+)/g);
+                        if (priceMatches && priceMatches.length >= 2) {
+                            originalPrice = parseFloat(priceMatches[1].replace(/₹|,/g, ''));
                         }
 
-                        // Original Price (MRP)
-                        const originalPriceEl = card.querySelector('div[class*="_3I9_wc"]');
-                        if (originalPriceEl) {
-                            const originalText = originalPriceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (originalText) originalPrice = parseFloat(originalText);
+                        // Extract rating using regex: X.X (
+                        let rating = null;
+                        const ratingMatch = cardText.match(/(\d+\.?\d*)\s*\(/);
+                        if (ratingMatch) {
+                            rating = parseFloat(ratingMatch[1]);
                         }
 
-                        // Rating - use null by default
-                        let ratingVal = null;
-                        let ratingCount = 0;
-                        const ratingEl = card.querySelector('[class*="rating"], [class*="XQR5OD"]');
-                        if (ratingEl) {
-                            const ratingText = ratingEl.innerText || ratingEl.textContent;
-                            if (ratingText) {
-                                const match = ratingText.match(/(\d+\.?\d*)/);
-                                if (match) {
-                                    const rating = parseFloat(match[1]);
-                                    if (Number.isFinite(rating) && rating > 0 && rating <= 5) {
-                                        ratingVal = rating;
-                                    }
-                                }
+                        // Extract product URL
+                        let productUrl = '';
+                        const linkEl = card.querySelector('a[href]');
+                        if (linkEl) {
+                            productUrl = linkEl.href || '';
+                            if (!productUrl.startsWith('http')) {
+                                productUrl = 'https://www.flipkart.com' + productUrl;
                             }
                         }
 
-                        // Image - validate URL
+                        // Get image
+                        let imageUrl = '';
                         const imgEl = card.querySelector('img');
-                        let image = null;
-                        if (imgEl && imgEl.src && imgEl.src.startsWith('http')) {
-                            image = imgEl.src;
+                        if (imgEl) {
+                            imageUrl = imgEl.src || imgEl.getAttribute('data-src') || '';
                         }
 
-                        // Only add products with valid price and title
-                        if (title && productUrl && currentPrice !== null && currentPrice !== undefined) {
+                        // Only add if we have at least title and price
+                        if (title && currentPrice) {
                             products.push({
                                 title: title.trim(),
                                 price: currentPrice,
-                                originalPrice: originalPrice > currentPrice ? originalPrice : null,
-                                image: image,
-                                productUrl,
-                                source: 'Flipkart',
-                                rating: ratingVal,
+                                originalPrice: originalPrice || currentPrice,
+                                rating: rating || null,
+                                image: imageUrl,
+                                productUrl: productUrl || '',
                                 availability: true
                             });
                         }
-                    } catch (err) {
-                        console.error('Flipkart: Error parsing product card:', err.message);
+
+                    } catch (e) {
+                        console.log(`Error parsing card ${index}: ${e.message}`);
                     }
                 });
 

@@ -70,99 +70,105 @@ class RelianceSearchScraper extends BaseSearchScraper {
             // Shorter wait for page content to load
             await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
+            // Check if page has actual content (not a block page)
+            const hasContent = await page.evaluate(() => {
+                // Check if product cards are present
+                const productCards = document.querySelectorAll('.sp__product, [class*="product-item"], [class*="product-card"]');
+                return productCards.length > 0;
+            });
+
+            if (!hasContent) {
+                console.log(`[reliance] No product content detected, page might be blocked. Retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Try again with fresh page
+                throw new Error('BLOCKED: No product content detected on page');
+            }
+
             const results = await page.evaluate(() => {
                 const products = [];
 
-                // Reliance Digital product cards - try multiple selectors
-                let productCards = document.querySelectorAll('.sp__product, [class*="product-item"]');
-
-                // Fallback: try common Reliance containers
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('[class*="product-card"], [class*="productCard"]');
-                }
-
-                // Another fallback: grid items
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('.pl__container li, [class*="ProductCard"]');
-                }
+                // Get all product cards from Reliance
+                let productCards = document.querySelectorAll('.sp__product, [class*="ProductCard"], [class*="product-item"], li.pl__item');
 
                 console.log(`Reliance found ${productCards.length} product cards`);
 
+                if (productCards.length === 0) {
+                    return products;
+                }
+
                 productCards.forEach((card, index) => {
                     try {
-                        // Title - try multiple selectors
-                        let titleEl = card.querySelector('.sp__name a, a[class*="product-title"], h3 a');
-                        if (!titleEl) titleEl = card.querySelector('a[title]');
-                        if (!titleEl) titleEl = card.querySelector('a');
+                        // Extract data from card's text content (text mining approach)
+                        const cardText = card.innerText || card.textContent;
 
-                        if (!titleEl) {
-                            console.log(`Reliance: No title found for card ${index}`);
+                        // Get title from link attribute or text
+                        let title = '';
+                        const titleLink = card.querySelector('a[title]') || card.querySelector('a.sp__name');
+                        if (titleLink) {
+                            title = titleLink.getAttribute('title') || titleLink.innerText;
+                        }
+                        if (!title) {
+                            const lines = cardText.split('\n').filter(l => l.trim());
+                            title = lines.length > 0 ? lines[0] : '';
+                        }
+
+                        if (!title) {
                             return;
                         }
 
-                        const title = titleEl.innerText.trim() || titleEl.getAttribute('title');
-                        let productUrl = titleEl.href;
-                        if (productUrl && !productUrl.startsWith('http')) {
-                            productUrl = 'https://www.reliancedigital.in' + productUrl;
-                        }
-
-                        // Price - look for price elements
+                        // Extract prices - Reliance uses ₹
                         let currentPrice = null;
                         let originalPrice = null;
-                        const priceEl = card.querySelector('.TextWeb__Text-sc-1cyx778-0, [class*="price"], .sp__price');
-                        if (priceEl) {
-                            const priceText = priceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (priceText) currentPrice = parseFloat(priceText);
+                        const priceMatch = cardText.match(/₹\s*([\d,]+)/);
+                        if (priceMatch) {
+                            currentPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
                         }
 
-                        // Original Price
-                        const originalPriceEl = card.querySelector('.mrp, .old-price, [class*="mrp"]');
-                        if (originalPriceEl) {
-                            const originalText = originalPriceEl.innerText.replace(/[^0-9.]/g, '');
-                            if (originalText) originalPrice = parseFloat(originalText);
+                        // Look for original price (second price if exists)
+                        const priceMatches = cardText.match(/₹\s*([\d,]+)/g);
+                        if (priceMatches && priceMatches.length >= 2) {
+                            originalPrice = parseFloat(priceMatches[1].replace(/₹|,/g, ''));
                         }
 
-                        // Rating - use null by default
-                        let ratingVal = null;
-                        const ratingEl = card.querySelector('[class*="rating"], [class*="stars"], .sp__rating');
-                        if (ratingEl) {
-                            const ratingText = ratingEl.innerText || ratingEl.textContent;
-                            if (ratingText) {
-                                const match = ratingText.match(/(\d+\.?\d*)/);
-                                if (match) {
-                                    const rating = parseFloat(match[1]);
-                                    if (Number.isFinite(rating) && rating > 0 && rating <= 5) {
-                                        ratingVal = rating;
-                                    }
-                                }
+                        // Extract rating
+                        let rating = null;
+                        const ratingMatch = cardText.match(/(\d+\.?\d*)\s*(?:★|stars|out of)/);
+                        if (ratingMatch) {
+                            rating = parseFloat(ratingMatch[1]);
+                        }
+
+                        // Extract product URL
+                        let productUrl = '';
+                        const linkEl = card.querySelector('a[href]');
+                        if (linkEl) {
+                            productUrl = linkEl.href || '';
+                            if (!productUrl.startsWith('http')) {
+                                productUrl = 'https://www.reliancedigital.in' + productUrl;
                             }
                         }
 
-                        // Image - validate URL
+                        // Get image
+                        let imageUrl = '';
                         const imgEl = card.querySelector('img');
-                        let image = null;
                         if (imgEl) {
-                            const src = imgEl.src || imgEl.getAttribute('data-src');
-                            if (src && src.startsWith('http')) {
-                                image = src;
-                            }
+                            imageUrl = imgEl.src || imgEl.getAttribute('data-src') || '';
                         }
 
-                        // Only add products with valid price and title
-                        if (title && productUrl && currentPrice !== null && currentPrice !== undefined) {
+                        // Only add if we have at least title and price
+                        if (title && currentPrice) {
                             products.push({
                                 title: title.trim(),
                                 price: currentPrice,
-                                originalPrice: originalPrice > currentPrice ? originalPrice : null,
-                                image: image,
-                                productUrl,
-                                source: 'Reliance',
-                                rating: ratingVal,
+                                originalPrice: originalPrice || currentPrice,
+                                rating: rating || null,
+                                image: imageUrl,
+                                productUrl: productUrl || '',
                                 availability: true
                             });
                         }
-                    } catch (err) {
-                        console.error('Reliance: Error parsing product card:', err.message);
+
+                    } catch (e) {
+                        console.log(`Error parsing card ${index}: ${e.message}`);
                     }
                 });
 
