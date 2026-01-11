@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import OptimizedImage from "./OptimizedImage";
 
 export default function RecommendationCard({ item }) {
   const navigate = useNavigate();
@@ -6,10 +7,16 @@ export default function RecommendationCard({ item }) {
   // Handle both database products (with _id, title) and static products (with id, name)
   const productId = item._id || item.id;
   const productName = item.title || item.name;
-  const productImage = item.image || "https://via.placeholder.com/200";
-  const productPrice = item.price || 0;
-  const productRating = item.rating || 0;
+  const productImage = item.image; // OptimizedImage handles fallback
+  const productPrice = item.price;
+  const productRating = item.rating;
   const productSource = item.source || "";
+
+  // Don't render if missing required title and any of price/rating/reviews
+  const missingAllMetrics = (productPrice === null || productPrice === undefined) && (productRating === null || productRating === undefined) && !item.reviews;
+  if (!productName || missingAllMetrics) {
+    return null;
+  }
 
   return (
     <div
@@ -22,14 +29,10 @@ export default function RecommendationCard({ item }) {
     >
       {/* IMAGE */}
       <div className="h-[170px] flex items-center justify-center bg-gray-50 rounded-lg">
-        <img
+        <OptimizedImage
           src={productImage}
           alt={productName}
           className="w-full h-40 object-contain"
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.target.src = "https://via.placeholder.com/200";
-          }}
         />
       </div>
       {/* DETAILS */}
@@ -48,7 +51,14 @@ export default function RecommendationCard({ item }) {
 
         <div className="mt-1 flex items-center gap-2">
           <span className="text-lg font-semibold text-black">
-            ₹{productPrice.toLocaleString('en-IN')}
+            {productPrice !== null && productPrice !== undefined ? (
+              (() => {
+                const raw = typeof productPrice === 'number' ? productPrice : Number(String(productPrice).replace(/[^0-9.-]+/g, ''));
+                return Number.isFinite(raw) ? `₹${raw.toLocaleString('en-IN')}` : <span className="text-slate-400">-</span>;
+              })()
+            ) : (
+              <span className="text-slate-400">-</span>
+            )}
           </span>
           {item.mrp && (
             <span className="text-xs text-gray-400 line-through">

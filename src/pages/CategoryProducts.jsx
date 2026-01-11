@@ -80,9 +80,17 @@ export default function CategoryProducts() {
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-6">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product._id || product.id} product={product} />
-                ))}
+                {filteredProducts
+                  .filter(product => {
+                    // Only show products with valid prices and titles
+                    const hasValidPrice = product.price !== null && product.price !== undefined && product.price !== '';
+                    const hasValidTitle = product.title && product.title.trim();
+                    return hasValidPrice && hasValidTitle;
+                  })
+                  .map((product) => (
+                    <ProductCard key={product._id || product.id} product={product} />
+                  ))
+                }
               </div>
             )}
           </div>

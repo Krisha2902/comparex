@@ -10,6 +10,8 @@ export default function LoginSignup({ onLogin }) {
   const from = location.state?.from || "/";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState(""); // Can be email or phone
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,7 +29,7 @@ export default function LoginSignup({ onLogin }) {
           return;
         }
 
-        if (!name || !email || !password) {
+        if (!name || !email || !phone || !password) {
           alert("Please fill all fields!");
           setLoading(false);
           return;
@@ -36,7 +38,7 @@ export default function LoginSignup({ onLogin }) {
         const res = await fetch("http://localhost:5000/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }),
+          body: JSON.stringify({ name, email, phone, password }),
         });
 
         let data;
@@ -50,6 +52,7 @@ export default function LoginSignup({ onLogin }) {
           alert("Signup successful! Please login.");
           // Clear form and switch to login
           setName("");
+          setPhone("");
           setPassword("");
           setConfirmPassword("");
           setIsLogin(true);
@@ -58,7 +61,7 @@ export default function LoginSignup({ onLogin }) {
         }
       } else {
         // Login flow
-        if (!email || !password) {
+        if (!identifier || !password) {
           alert("Please fill all fields!");
           setLoading(false);
           return;
@@ -67,7 +70,7 @@ export default function LoginSignup({ onLogin }) {
         const res = await fetch("http://localhost:5000/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ identifier, password }),
         });
 
         let data;
@@ -120,25 +123,43 @@ export default function LoginSignup({ onLogin }) {
           {/* FORM */}
           <form onSubmit={handleSubmit} className="space-y-4">
 
-            {!isLogin && (
+            {!isLogin ? (
+              <>
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone Number (e.g. 9876543210)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+              </>
+            ) : (
               <input
                 type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Email or Phone Number"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
                 required
               />
             )}
-
-            <input
-              type="email"
-              placeholder="Email Address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-              required
-            />
 
             <input
               type="password"
@@ -178,7 +199,7 @@ export default function LoginSignup({ onLogin }) {
                 <button
                   onClick={() => {
                     setIsLogin(false);
-                    setEmail("");
+                    setIdentifier("");
                     setPassword("");
                   }}
                   className="text-blue-600 hover:underline"
@@ -193,6 +214,8 @@ export default function LoginSignup({ onLogin }) {
                   onClick={() => {
                     setIsLogin(true);
                     setName("");
+                    setEmail("");
+                    setPhone("");
                     setConfirmPassword("");
                   }}
                   className="text-blue-600 hover:underline"

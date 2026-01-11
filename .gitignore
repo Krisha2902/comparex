@@ -24,4 +24,6 @@ dist-ssr
 *.sw?
 
 
+# .env - Temporarily enabled for configuration (REMEMBER TO RE-ENABLE BEFORE COMMIT!)
+# .env
 .env

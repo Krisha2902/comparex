@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import OptimizedImage from "./OptimizedImage";
 
 export default function ProductCard({ product }) {
   const navigate = useNavigate();
@@ -6,23 +7,23 @@ export default function ProductCard({ product }) {
   // Handle both database products (with _id, title) and static products (with id, name)
   const productId = product._id || product.id;
   const productName = product.title || product.name;
-  const productImage = product.image || "https://via.placeholder.com/200";
-  const productPrice = product.price || 0;
-  const productRating = product.rating || 0;
+  const productImage = product.image; // OptimizedImage handles fallback
+  const productPrice = product.price;
+  const productRating = product.rating;
+
+  // Don't render if missing required fields
+  if (!productName || productPrice === null || productPrice === undefined) {
+    return null;
+  }
 
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
-      
+
       <div className="h-40 flex items-center justify-center bg-gray-50 rounded-lg">
-        <img
+        <OptimizedImage
           src={productImage}
           alt={productName}
           className="max-h-full max-w-full object-contain"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.target.src = "https://via.placeholder.com/200";
-          }}
         />
       </div>
 
@@ -37,9 +38,11 @@ export default function ProductCard({ product }) {
         </div>
       )}
 
-      <p className="text-blue-600 font-semibold mt-1">
-        ₹{productPrice.toLocaleString('en-IN')}
-      </p>
+      {productPrice !== null && productPrice !== undefined && (
+        <p className="text-blue-600 font-semibold mt-1">
+          ₹{(typeof productPrice === 'number' ? productPrice : parseInt(productPrice)).toLocaleString('en-IN')}
+        </p>
+      )}
 
       {product.source && (
         <p className="text-xs text-gray-500 mt-1">

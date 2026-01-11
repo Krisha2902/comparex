@@ -1,9 +1,11 @@
+import OptimizedImage from "./OptimizedImage";
+
 export default function WishlistCard({ item }) {
   return (
     <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex flex-col">
       {/* Image */}
       <div className="w-full h-40 bg-[#f5faff] rounded-lg flex items-center justify-center mb-4">
-        <img
+        <OptimizedImage
           src={item.image}
           alt={item.name}
           className="h-32 object-contain"

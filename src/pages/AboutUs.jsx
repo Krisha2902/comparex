@@ -5,6 +5,7 @@ import {
   GlobeAltIcon,
   RocketLaunchIcon,
 } from "@heroicons/react/24/outline";
+import OptimizedImage from "../components/OptimizedImage";
 
 import vishvaImg from "../assets/vishva.jpeg";
 import krishaImg from "../assets/krisha.jpeg";
@@ -93,7 +94,7 @@ function InfoCard({ icon: Icon, title, text }) {
 function TeamCard({ name, role, image }) {
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition text-center">
-      <img
+      <OptimizedImage
         src={image}
         alt={name}
         className="w-28 h-28 mx-auto rounded-full object-cover mb-4 border-4 border-blue-100"

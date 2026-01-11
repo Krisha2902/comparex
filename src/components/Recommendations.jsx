@@ -44,9 +44,17 @@ export default function Recommendations({products}) {
           no-scrollbar
         "
       >
-        {products.map((item) => (
-          <RecommendationCard key={item._id || item.id} item={item} />
-        ))}
+        {products
+          .filter(item => {
+            const hasValidTitle = (item.title || item.name) && (item.title || item.name).trim();
+            const hasPrice = item.price !== null && item.price !== undefined && item.price !== '';
+            const hasRating = item.rating !== null && item.rating !== undefined && item.rating !== '';
+            const hasReviews = item.reviews !== null && item.reviews !== undefined;
+            return hasValidTitle && (hasPrice || hasRating || hasReviews);
+          })
+          .map((item) => (
+            <RecommendationCard key={item._id || item.id} item={item} />
+          ))}
       </div>
     </div>
   );

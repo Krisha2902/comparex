@@ -1,3 +1,5 @@
+import { PLACEHOLDER_IMAGE } from "../constants";
+
 export const products = [
   {
     id: 1,
@@ -18,13 +20,13 @@ export const products = [
     name: "Men T-Shirt",
     category: "fashion",
     price: "799",
-    image: "https://via.placeholder.com/300",
+    image: PLACEHOLDER_IMAGE,
   },
   {
     id: 4,
     name: "Sofa Set",
     category: "home",
     price: "24,999",
-    image: "https://via.placeholder.com/300",
+    image: PLACEHOLDER_IMAGE,
   },
 ];

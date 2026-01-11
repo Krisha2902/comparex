@@ -1,0 +1,14 @@
+# Worker service symlinks to main backend code
+models/
+utils/
+scrapers/
+config/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+# Logs
+*.log

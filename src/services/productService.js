@@ -1,62 +1,52 @@
 import axios from "axios";
 
-export const searchProducts = async (query, category) => {
+// Use environment variable for API URL with fallback for development
+const API_Base = import.meta.env.VITE_API_URL || "http://localhost:5000/api/search";
+
+export const searchProducts = async (query, category = "electronics") => {
   try {
-    const url = `http://localhost:5000/api/search?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`;
-    console.log(`🌐 API Call: ${url}`);
-    console.log(`⏳ Waiting for response...`);
-    
-    const res = await axios.get(url, {
-      timeout: 90000, // 90 seconds timeout for scraping (scraping takes time)
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      validateStatus: function (status) {
-        // Accept any status code < 500
-        return status < 500;
-      }
+    // 1. Start Scraping Job
+    console.log(`Starting scrape for: ${query}`);
+    const startRes = await axios.post(`${API_Base}/scrape`, { query, category });
+    const { jobId } = startRes.data;
+
+    if (!jobId) throw new Error("Failed to start scraping job");
+
+    console.log(`Job started: ${jobId}. Polling for results...`);
+
+    // 2. Poll for status
+    return new Promise((resolve, reject) => {
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`${API_Base}/status/${jobId}`);
+          const job = statusRes.data;
+
+          console.log(`Job Status: ${job.status}`);
+
+          if (job.status === "completed") {
+            clearInterval(pollInterval);
+            resolve(job.results || []);
+          } else if (job.status === "failed") {
+            clearInterval(pollInterval);
+            reject(new Error(job.error || "Scraping failed"));
+          }
+          // If running or pending, continue polling naturally
+        } catch (err) {
+          clearInterval(pollInterval);
+          reject(err);
+        }
+      }, 2000); // Poll every 2 seconds
+
+      // Timeout after 180 seconds (3 min) - allows for 4 scrapers with retry + slow networks
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        reject(new Error("Scraping timed out - Server took too long"));
+      }, 180000);
     });
-    
-    console.log(`✅ API Response received!`);
-    console.log(`✅ Status: ${res.status}`);
-    console.log(`✅ Data type: ${Array.isArray(res.data) ? 'Array' : typeof res.data}`);
-    console.log(`✅ Data length: ${Array.isArray(res.data) ? res.data.length : 'N/A'}`);
-    
-    if (res.status >= 400) {
-      console.error(`❌ API returned error status ${res.status}:`, res.data);
-      throw new Error(res.data?.message || `API returned status ${res.status}`);
-    }
-    
-    if (!Array.isArray(res.data)) {
-      console.error(`❌ API returned non-array data:`, res.data);
-      throw new Error('API returned invalid data format');
-    }
-    
-    console.log(`✅ Returning ${res.data.length} products`);
-    if (res.data.length > 0) {
-      console.log(`📦 Products:`, res.data.map(p => `  - ${p.source}: ${p.title?.substring(0, 50)}`));
-    }
-    
-    return res.data;
+
   } catch (error) {
-    console.error("❌ API Error Details:");
-    console.error("  Error message:", error.message);
-    console.error("  Error code:", error.code);
-    
-    if (error.response) {
-      console.error("  Response status:", error.response.status);
-      console.error("  Response data:", error.response.data);
-    } else if (error.request) {
-      console.error("  No response received - Server might be down or request timed out");
-      console.error("  Request details:", error.request);
-    }
-    
-    if (error.code === 'ECONNABORTED') {
-      throw new Error('Request timeout - Scraping is taking too long. Please try again.');
-    } else if (error.code === 'ECONNREFUSED') {
-      throw new Error('Cannot connect to server. Make sure backend is running on port 5000.');
-    }
-    
+    console.error("Search Service Error:", error);
     throw error;
   }
 };
+

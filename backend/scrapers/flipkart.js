@@ -1,58 +1,117 @@
-const puppeteer = require("puppeteer");
+const BaseScraper = require('./baseScraper');
+const { normalizeProductData } = require('../utils/normalizer');
 
-async function scrapeFlipkart(query, category) {
-  let browser;
-  try {
-    browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    );
-
-    await page.goto(
-      `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`,
-      { waitUntil: "networkidle2", timeout: 30000 }
-    );
-
-    await page.waitForTimeout(3000);
-
-    const products = await page.evaluate(() => {
-      const items = [];
-
-      document.querySelectorAll("._1AtVbE").forEach(el => {
-        const title = el.querySelector("._4rR01T")?.innerText;
-        const price = el.querySelector("._30jeq3")?.innerText;
-        const image = el.querySelector("img")?.src;
-
-        if (title && price) {
-          items.push({ title, price, image });
-        }
-      });
-
-      return items.slice(0, 5);
-    });
-
-    await browser.close();
-
-    return products.map(p => ({
-      title: p.title,
-      price: Number(p.price.replace(/[₹,]/g, "")),
-      image: p.image || "",
-      rating: 0,
-      source: "Flipkart",
-      category
-    }));
-  } catch (error) {
-    console.error("Flipkart scraper error:", error.message);
-    if (browser) {
-      await browser.close().catch(() => {});
+class FlipkartScraper extends BaseScraper {
+    constructor(browserManager) {
+        super(browserManager);
+        this.platform = 'flipkart';
     }
-    return []; // Return empty array on error
-  }
+
+    async scrape(url) {
+        let page = null;
+        try {
+            page = await this.getPage(url);
+
+            // Check for bot detection/CAPTCHA
+            const pageContent = await page.content();
+            if (pageContent.includes('Access Denied') ||
+                pageContent.includes('Pardon the interruption') ||
+                pageContent.includes('Please verify') ||
+                pageContent.includes('security check') ||
+                pageContent.includes('captcha')) {
+                console.error('❌ Flipkart bot detection triggered - CAPTCHA or access denied');
+                throw new Error('PLATFORM_BLOCKED: Flipkart has blocked this request. Please try again later.');
+            }
+
+            // Wait for title
+            await page.waitForSelector('h1', { timeout: 10000 }).catch(() => console.log('Title not found immediately'));
+
+            const data = await page.evaluate(() => {
+                const getText = (selector) => {
+                    const el = document.querySelector(selector);
+                    return el ? el.innerText.trim() : null;
+                };
+
+                const title = document.querySelector('h1')?.innerText.trim() || getText('.B_NuCI');
+
+                // Prices
+                // Flipkart usually has "₹" in the text, we strip it
+                const currentPriceText = getText('div[class*="_30jeq3"]');
+                const current = currentPriceText ? parseFloat(currentPriceText.replace(/[^0-9.]/g, '')) : null;
+
+                const mrpText = getText('div[class*="_3I9_wc"]');
+                const mrp = mrpText ? parseFloat(mrpText.replace(/[^0-9.]/g, '')) : null;
+
+                // Images
+                // Often in a list, or we can get the main one
+                const images = [];
+                const imgElements = document.querySelectorAll('img[class*="_396cs4"]');
+                imgElements.forEach(img => {
+                    if (img.src) images.push(img.src);
+                });
+
+                // Description
+                const description = getText('.X3BRps') || getText('div[class*="_1mXcCf"]');
+
+                // Specifications
+                const specs = {};
+                document.querySelectorAll('.row').forEach(row => {
+                    const key = row.querySelector('.col-3-12')?.innerText.trim();
+                    const val = row.querySelector('.col-9-12')?.innerText.trim();
+                    if (key && val) specs[key] = val;
+                });
+
+                // Rating - use null for missing and validate range
+                const ratingValText = getText('div[class*="_3LWZlK"]');
+                let rating = null;
+                if (ratingValText) {
+                    const rv = parseFloat(ratingValText);
+                    if (Number.isFinite(rv) && rv >= 0 && rv <= 5) rating = rv;
+                }
+
+                const countText = getText('span[class*="_2_R_DZ"]'); // "1,234 Ratings & 100 Reviews"
+                let count = null;
+                if (countText) {
+                    const matches = countText.match(/([0-9,]+)\s+Ratings/);
+                    if (matches && matches[1]) {
+                        const c = parseInt(matches[1].replace(/,/g, ''));
+                        if (Number.isFinite(c) && c > 0) count = c;
+                    }
+                }
+
+                return {
+                    platform: 'flipkart',
+                    url: window.location.href,
+                    title,
+                    description,
+                    images: [...new Set(images)], // Unique images
+                    price: {
+                        mrp,
+                        current: current,
+                        currency: 'INR'
+                    },
+                    rating: {
+                        average: rating,
+                        count: count
+                    },
+                    specifications: specs,
+                    availability: !document.querySelector('button[class*="_32l7f0"]'), // Notify me usually means OOS
+                    reviews: []
+                };
+            });
+
+            // Fix URL in case it wasn't available in evaluate
+            data.url = url;
+
+            return normalizeProductData(data);
+
+        } catch (error) {
+            console.error('Flipkart extraction error:', error);
+            throw error;
+        } finally {
+            await this.closePage(page);
+        }
+    }
 }
 
-module.exports = scrapeFlipkart;
+module.exports = FlipkartScraper;

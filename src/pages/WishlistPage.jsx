@@ -1,9 +1,30 @@
+import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import WishlistCard from "../components/WishlistCard";
 import EmptyWishlist from "../components/EmptyWishlist";
-import { wishlistItems } from "../data/wishlistData";
 
 export default function WishlistPage() {
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch wishlist from localStorage (or API in the future)
+    const token = localStorage.getItem("token");
+    if (token) {
+      // For now, just use localStorage
+      const saved = localStorage.getItem("wishlist");
+      if (saved) {
+        try {
+          setWishlistItems(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse wishlist", e);
+          setWishlistItems([]);
+        }
+      }
+    }
+    setLoading(false);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f3f9fd]">
       <Navbar />
@@ -13,7 +34,9 @@ export default function WishlistPage() {
           My Wishlist
         </h1>
 
-        {wishlistItems.length === 0 ? (
+        {loading ? (
+          <p className="text-gray-500 text-center py-12">Loading wishlist...</p>
+        ) : wishlistItems.length === 0 ? (
           <EmptyWishlist />
         ) : (
          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
