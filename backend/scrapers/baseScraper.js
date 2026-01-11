@@ -1,3 +1,4 @@
+const scraperConfig = require('../config/scraperConfig');
 const path = require('path');
 const fs = require('fs');
 
@@ -18,7 +19,7 @@ class BaseScraper {
         try {
             await page.goto(url, {
                 waitUntil: 'load',
-                timeout: 60000
+                timeout: scraperConfig.timeouts.pageLoad
             });
         } catch (err) {
             console.warn(`Warning: Navigation to ${url} timed out or failed, continuing anyway...`, err.message);

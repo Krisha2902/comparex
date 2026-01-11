@@ -1,4 +1,6 @@
 const BaseSearchScraper = require('./baseSearchScraper');
+const selectors = require('../../config/selectors').amazonSearch;
+const scraperConfig = require('../../config/scraperConfig');
 
 class AmazonSearchScraper extends BaseSearchScraper {
     constructor(browserManager) {
@@ -17,7 +19,33 @@ class AmazonSearchScraper extends BaseSearchScraper {
         let page = null;
         try {
             const searchUrl = this.buildSearchUrl(query, options.category);
-            page = await this.getPage(searchUrl);
+            console.log(`[amazon] Navigating to: ${searchUrl}`);
+
+            page = await this.browserManager.newPage();
+
+            // Set specific User Agent to avoid detection
+            await page.setUserAgent(scraperConfig.userAgents.desktop);
+
+            // Add extra headers
+            await page.setExtraHTTPHeaders({
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"'
+            });
+
+            try {
+                await page.goto(searchUrl, {
+                    waitUntil: 'networkidle2',
+                    timeout: scraperConfig.timeouts.pageLoad
+                });
+            } catch (err) {
+                console.warn(`[amazon] Navigation timeout, continuing...`, err.message);
+            }
 
             // Check for bot detection/CAPTCHA
             const pageContent = await page.content();
@@ -33,35 +61,28 @@ class AmazonSearchScraper extends BaseSearchScraper {
             await this.takeScreenshot(page, `amazon_search_${Date.now()}.png`);
 
             // Wait longer for search results to load (using Promise-based delay)
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, scraperConfig.timeouts.searchWait));
 
-            const results = await page.evaluate(() => {
+            const results = await page.evaluate((selectors) => {
                 const products = [];
 
                 // Try to find product cards with multiple selector strategies
-                let productCards = document.querySelectorAll('[data-component-type="s-search-result"]');
-
-                // Fallback: try data-asin attribute
-                if (productCards.length === 0) {
-                    productCards = document.querySelectorAll('div[data-asin]:not([data-asin=""])');
+                let productCards = [];
+                for (const sel of selectors.productCard) {
+                    productCards = document.querySelectorAll(sel);
+                    if (productCards.length > 0) break;
                 }
 
                 console.log(`Found ${productCards.length} product cards`);
 
-                if (productCards.length === 0) {
-                    console.log('No product cards found. Trying alternative selectors...');
-                    // Try another fallback
-                    productCards = document.querySelectorAll('[data-index]');
-                    console.log(`Alternative selector found ${productCards.length} items`);
-                }
-
                 productCards.forEach((card, index) => {
                     try {
                         // Title and Link - try multiple selectors
-                        let titleEl = card.querySelector('h2 a.a-link-normal');
-                        if (!titleEl) titleEl = card.querySelector('h2 a');
-                        if (!titleEl) titleEl = card.querySelector('.a-link-normal.s-underline-text');
-                        if (!titleEl) titleEl = card.querySelector('a.a-link-normal');
+                        let titleEl = null;
+                        for (const sel of selectors.title) {
+                            titleEl = card.querySelector(sel);
+                            if (titleEl) break;
+                        }
 
                         if (!titleEl) {
                             console.log(`No title found for card ${index}`);
@@ -76,36 +97,54 @@ class AmazonSearchScraper extends BaseSearchScraper {
 
                         // Price - look for any price element
                         let currentPrice = null;
-                        const priceEl = card.querySelector('.a-price span.a-offscreen, .a-price-whole');
-                        if (priceEl) {
-                            const priceText = (priceEl.innerText || priceEl.textContent).replace(/[^0-9.]/g, '');
-                            if (priceText) currentPrice = parseFloat(priceText);
+                        for (const sel of selectors.price) {
+                            const priceEl = card.querySelector(sel);
+                            if (priceEl) {
+                                const priceText = (priceEl.innerText || priceEl.textContent).replace(/[^0-9.]/g, '');
+                                if (priceText) {
+                                    currentPrice = parseFloat(priceText);
+                                    break;
+                                }
+                            }
                         }
 
                         // Rating - try to extract from stars
                         let ratingVal = null;
-                        let ratingCount = null;
-                        const ratingEl = card.querySelector('.a-star-small span.a-icon-alt, i.a-icon-star span.a-icon-alt');
-                        if (ratingEl) {
-                            const ratingText = ratingEl.innerText || ratingEl.textContent;
-                            if (ratingText) {
-                                const match = ratingText.match(/(\d+\.?\d*)/);
-                                if (match) ratingVal = parseFloat(match[1]);
+                        for (const sel of selectors.rating) {
+                            const ratingEl = card.querySelector(sel);
+                            if (ratingEl) {
+                                const ratingText = ratingEl.innerText || ratingEl.textContent;
+                                if (ratingText) {
+                                    const match = ratingText.match(/(\d+\.?\d*)/);
+                                    if (match) {
+                                        ratingVal = parseFloat(match[1]);
+                                        break;
+                                    }
+                                }
                             }
                         }
 
                         // Review count
-                        const countEl = card.querySelector('.a-size-base.s-color-base');
-                        if (countEl) {
-                            const countText = countEl.innerText.replace(/[^0-9]/g, '');
-                            if (countText) ratingCount = parseInt(countText);
+                        let ratingCount = null;
+                        for (const sel of selectors.reviewCount) {
+                            const countEl = card.querySelector(sel);
+                            if (countEl) {
+                                const countText = countEl.innerText.replace(/[^0-9]/g, '');
+                                if (countText) {
+                                    ratingCount = parseInt(countText);
+                                    break;
+                                }
+                            }
                         }
 
                         // Image - validate URL
-                        const imgEl = card.querySelector('img');
                         let image = null;
-                        if (imgEl && imgEl.src && imgEl.src.startsWith('http')) {
-                            image = imgEl.src;
+                        for (const sel of selectors.image) {
+                            const imgEl = card.querySelector(sel);
+                            if (imgEl && imgEl.src && imgEl.src.startsWith('http')) {
+                                image = imgEl.src;
+                                break;
+                            }
                         }
 
                         // Only add if we have basic info
@@ -127,7 +166,7 @@ class AmazonSearchScraper extends BaseSearchScraper {
                 });
 
                 return products;
-            });
+            }, selectors);
 
             console.log(`Amazon search extracted ${results.length} products`);
             if (results.length > 0) {

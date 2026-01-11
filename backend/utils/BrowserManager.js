@@ -12,11 +12,11 @@ class BrowserManager {
     async init(proxyUrl = null, retryAttempt = 0) {
         // Use provided proxy or get next proxy from proxy manager
         const proxy = proxyUrl || (proxyManager.hasProxies() ? proxyManager.getNextProxy() : null);
-        
+
         // If proxy changed or browser disconnected, recreate browser
-        const shouldRecreate = !this.browser || 
-                              !this.browser.isConnected() || 
-                              (proxy && this.currentProxy !== proxy);
+        const shouldRecreate = !this.browser ||
+            !this.browser.isConnected() ||
+            (proxy && this.currentProxy !== proxy);
 
         if (shouldRecreate) {
             // Close existing browser if it exists
@@ -29,7 +29,7 @@ class BrowserManager {
             }
 
             console.log(`Initializing browser${proxy ? ` with proxy: ${proxy.substring(0, 30)}...` : ' without proxy'}... (attempt ${retryAttempt + 1}/3)`);
-            
+
             try {
                 const launchArgs = [
                     '--no-sandbox',
@@ -57,9 +57,13 @@ class BrowserManager {
                     this.currentProxy = null;
                 }
 
+                const headlessMode = process.env.HEADLESS === 'false' ? false : "new";
                 this.browser = await puppeteer.launch({
-                    headless: "new",
-                    args: launchArgs
+                    headless: headlessMode,
+                    args: [
+                        ...launchArgs,
+                        '--disable-features=IsolateOrigins,site-per-process'
+                    ]
                 });
 
                 // Set proxy authentication if needed
@@ -83,14 +87,14 @@ class BrowserManager {
                 if (proxy) {
                     proxyManager.markProxyFailed(proxy);
                 }
-                
+
                 // Exponential backoff retry logic
                 const maxRetries = 3;
                 if (retryAttempt < maxRetries - 1) {
                     const delayMs = Math.pow(2, retryAttempt) * 1000; // 1s, 2s, 4s
                     console.log(`⏳ Retrying browser initialization in ${delayMs}ms...`);
                     await new Promise(resolve => setTimeout(resolve, delayMs));
-                    
+
                     // Try with next proxy on retry
                     const nextProxy = proxyManager.hasProxies() ? proxyManager.getNextProxy() : null;
                     return this.init(nextProxy, retryAttempt + 1);
@@ -161,9 +165,9 @@ class BrowserManager {
                     page.on('request', (req) => {
                         const resourceType = req.resourceType();
                         if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-                            req.abort().catch(() => {});
+                            req.abort().catch(() => { });
                         } else {
-                            req.continue().catch(() => {});
+                            req.continue().catch(() => { });
                         }
                     });
 
@@ -188,20 +192,20 @@ class BrowserManager {
                     resolve(page);
                 } catch (err) {
                     console.error(`Error creating page (attempt ${retryAttempt + 1}/2): ${err.message}`);
-                    
+
                     // Retry page creation once with exponential backoff
                     const maxRetries = 2;
                     if (retryAttempt < maxRetries - 1) {
                         const delayMs = Math.pow(2, retryAttempt) * 500; // 500ms, 1s
                         console.log(`⏳ Retrying page creation in ${delayMs}ms...`);
-                        
+
                         this.isCreatingPage = false;
                         // Process next task in queue
                         if (this.pageCreationQueue.length > 0) {
                             const nextTask = this.pageCreationQueue.shift();
                             nextTask();
                         }
-                        
+
                         // Retry after delay
                         await new Promise(resolve => setTimeout(resolve, delayMs));
                         this.newPage(url, retryAttempt + 1).then(resolve).catch(reject);

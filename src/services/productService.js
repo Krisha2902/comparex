@@ -1,53 +1,47 @@
+
 import axios from "axios";
 import API_BASE_URL from "../config/api";
 
 // Use environment variable for API URL with fallback for development
 const API_Base = `${API_BASE_URL}/api/search`;
 
-export const searchProducts = async (query, category = "electronics") => {
+export const initiateSearch = async (query, category = "electronics") => {
   try {
-    // 1. Start Scraping Job
     console.log(`Starting scrape for: ${query}`);
-    const startRes = await axios.post(`${API_Base}/scrape`, { query, category });
-    const { jobId } = startRes.data;
-
-    if (!jobId) throw new Error("Failed to start scraping job");
-
-    console.log(`Job started: ${jobId}. Polling for results...`);
-
-    // 2. Poll for status
-    return new Promise((resolve, reject) => {
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await axios.get(`${API_Base}/status/${jobId}`);
-          const job = statusRes.data;
-
-          console.log(`Job Status: ${job.status}`);
-
-          if (job.status === "completed") {
-            clearInterval(pollInterval);
-            resolve(job.results || []);
-          } else if (job.status === "failed") {
-            clearInterval(pollInterval);
-            reject(new Error(job.error || "Scraping failed"));
-          }
-          // If running or pending, continue polling naturally
-        } catch (err) {
-          clearInterval(pollInterval);
-          reject(err);
-        }
-      }, 2000); // Poll every 2 seconds
-
-      // Timeout after 180 seconds (3 min) - allows for 4 scrapers with retry + slow networks
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        reject(new Error("Scraping timed out - Server took too long"));
-      }, 180000);
-    });
-
+    const res = await axios.post(`${API_Base}/scrape`, { query, category });
+    if (!res.data.jobId) throw new Error("Failed to start scraping job");
+    return res.data.jobId;
   } catch (error) {
-    console.error("Search Service Error:", error);
-    throw error;
+    console.error("Initiate Search Error:", error);
+    if (error.response) {
+      // Server responded with a status other than 2xx
+      const msg = error.response.data?.message || `Server error: ${error.response.status}`;
+      throw new Error(msg);
+    } else if (error.request) {
+      // Request was made but no response received
+      throw new Error("Network error: No response from server. Please check your connection.");
+    } else {
+      // Something happened in setting up the request
+      throw error;
+    }
   }
 };
+
+export const getSearchStatus = async (jobId) => {
+  try {
+    const res = await axios.get(`${API_Base}/status/${jobId}`);
+    return res.data;
+  } catch (error) {
+    console.error("Get Status Error:", error);
+    if (error.response) {
+      const msg = error.response.data?.message || `Server error: ${error.response.status}`;
+      throw new Error(msg);
+    } else if (error.request) {
+      throw new Error("Network error: Unable to fetch search status.");
+    } else {
+      throw error;
+    }
+  }
+};
+
 

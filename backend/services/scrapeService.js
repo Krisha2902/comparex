@@ -177,7 +177,7 @@ async function getLatestPrice(productName, stores, productUrl = null) {
     throw new Error("Product name is required when productUrl is not available");
   }
 
-  const query = productName.trim();
+  const query = productName.trim().toLowerCase();
   const storesToSearch = Array.isArray(stores) ? stores.map(s => s.toLowerCase().trim()) : (stores ? [stores.toLowerCase().trim()] : []);
 
   console.log(`🔍 Getting latest price for "${query}"${storesToSearch.length > 0 ? ` from stores: ${storesToSearch.join(', ')}` : ''}`);
@@ -191,180 +191,50 @@ async function getLatestPrice(productName, stores, productUrl = null) {
   }
 
   try {
-    // Initialize browser if needed (with proxy rotation if available)
-    let browserInitAttempts = 0;
-    const maxBrowserAttempts = 3;
-    let proxyUsed = null;
+    // Use searchService to delegate to Worker
+    const searchService = require('./searchService');
+    const { jobId, status } = await searchService.startScraping(query, 'electronics');
 
-    while (browserInitAttempts < maxBrowserAttempts) {
-      try {
-        // Get proxy if available
-        const proxy = proxyManager.hasProxies() ? proxyManager.getNextProxy() : null;
-        proxyUsed = proxy;
+    console.log(`⏳ Job ${jobId} started for alert check. Waiting for results...`);
 
-        await browserManager.init(proxy);
-        break;
-      } catch (e) {
-        browserInitAttempts++;
-        console.error(`⚠️ Browser init failed (attempt ${browserInitAttempts}):`, e.message);
+    // Poll for completion
+    let job = await searchService.getJobStatus(jobId);
+    let attempts = 0;
+    const maxAttempts = 30; // 60 seconds (2s interval)
 
-        // Mark proxy as failed if used
-        if (proxyUsed) {
-          proxyManager.markProxyFailed(proxyUsed);
-        }
-
-        if (browserInitAttempts >= maxBrowserAttempts) {
-          throw new Error(`Browser initialization failed after ${maxBrowserAttempts} attempts`);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 1000 * browserInitAttempts));
-      }
+    while (job.status !== 'completed' && job.status !== 'failed' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      job = await searchService.getJobStatus(jobId);
+      attempts++;
+      if (attempts % 5 === 0) console.log(`   Waiting for Job ${jobId}... (${attempts}/${maxAttempts})`);
     }
 
-    // If stores are specified, only scrape those stores
-    let scrapers = [];
-    if (storesToSearch.length > 0) {
-      for (const s of storesToSearch) {
-        switch (s) {
-          case 'amazon':
-            scrapers.push(new AmazonSearchScraper(browserManager));
-            break;
-          case 'flipkart':
-            scrapers.push(new FlipkartSearchScraper(browserManager));
-            break;
-          case 'croma':
-            scrapers.push(new CromaSearchScraper(browserManager));
-            break;
-          case 'reliance':
-            scrapers.push(new RelianceSearchScraper(browserManager));
-            break;
-          default:
-            console.warn(`Unknown store "${s}", skipping`);
-        }
-      }
-
-      // If no valid scrapers found after filtering, fallback to all (unless strict matching is desired)
-      if (scrapers.length === 0) {
-        console.warn(`No valid stores found in specified list, searching all stores`);
-        scrapers = [
-          new AmazonSearchScraper(browserManager),
-          new FlipkartSearchScraper(browserManager),
-          new CromaSearchScraper(browserManager),
-          new RelianceSearchScraper(browserManager)
-        ];
-      }
-    } else {
-      // If no stores specified, search all stores
-      scrapers = [
-        new AmazonSearchScraper(browserManager),
-        new FlipkartSearchScraper(browserManager),
-        new CromaSearchScraper(browserManager),
-        new RelianceSearchScraper(browserManager)
-      ];
+    if (job.status !== 'completed') {
+      throw new Error(`Scraping job ${jobId} failed or timed out. Status: ${job.status}`);
     }
 
-    // Scrape products from specified store(s) with rate limiting
-    const allProducts = [];
+    const allProducts = job.results || [];
 
-    for (const scraper of scrapers) {
-      try {
-        // Apply rate limiting per platform
-        await rateLimiter.waitForAvailability(scraper.platform);
-        rateLimiter.recordRequest(scraper.platform);
-        console.log(`📊 Rate limit: ${rateLimiter.getRequestCount(scraper.platform)}/${rateLimiter.getRateLimit(scraper.platform)} requests for ${scraper.platform}`);
-
-        console.log(`Scraping ${scraper.platform} for "${query}"...`);
-
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout: ${scraper.platform} took too long`)), 40000)
-        );
-
-        let products;
-        try {
-          products = await Promise.race([
-            scraper.search(query, { category: 'electronics' }),
-            timeoutPromise
-          ]);
-
-          // Mark proxy as successful if used
-          if (proxyUsed) {
-            proxyManager.markProxySuccess(proxyUsed);
-          }
-        } catch (scrapeError) {
-          // Mark proxy as failed if scraping failed
-          if (proxyUsed) {
-            proxyManager.markProxyFailed(proxyUsed);
-          }
-          throw scrapeError;
-        }
-
-        console.log(`✅ ${scraper.platform} found ${products.length} products`);
-        allProducts.push(...products);
-      } catch (err) {
-        console.error(`❌ Error scraping ${scraper.platform}:`, err.message);
-        // Continue with other scrapers even if one fails
+    // Filter by stores if specified
+    const filteredProducts = allProducts.filter(p => {
+      if (!p.price || p.price <= 0) return false;
+      if (storesToSearch.length > 0 && p.source) {
+        return storesToSearch.includes(p.source.toLowerCase());
       }
+      return true;
+    });
+
+    if (filteredProducts.length === 0) {
+      // Try DB fallback if worker found nothing? 
+      // searchService result ALREADY includes DB results.
+      throw new Error(`No valid products found for "${query}"`);
     }
 
-    // Also check database for fallback
-    try {
-      const searchRegex = new RegExp(query, 'i');
-      const dbProducts = await Product.find({
-        $or: [
-          { title: searchRegex }
-        ]
-      }).limit(10);
+    // Find lowest price
+    filteredProducts.sort((a, b) => a.price - b.price);
+    const lowestPrice = filteredProducts[0].price;
 
-      for (const p of dbProducts) {
-        if (p.price && p.price > 0) {
-          try {
-            const validated = normalizeSearchProduct({
-              title: p.title,
-              price: p.price,
-              image: p.image || null,
-              productUrl: p.productUrl || `/product/${p._id}`,
-              source: p.source || 'Database',
-              rating: p.rating && p.rating > 0 ? p.rating : null,
-              availability: true
-            });
-            allProducts.push(validated);
-          } catch (err) {
-            console.warn(`Skipping DB product validation error: ${p.title}`);
-          }
-        }
-      }
-    } catch (dbErr) {
-      console.error("Database search failed:", dbErr.message);
-    }
-
-    // Validate and normalize products
-    const validProducts = [];
-    for (const product of allProducts) {
-      try {
-        const validated = normalizeSearchProduct(product);
-
-        // Filter by store if specified
-        if (storesToSearch.length > 0 && validated.source && !storesToSearch.includes(validated.source.toLowerCase())) {
-          continue;
-        }
-
-        if (validated.price && validated.price > 0) {
-          validProducts.push(validated);
-        }
-      } catch (err) {
-        console.warn(`Skipping invalid product: ${product?.title}`);
-      }
-    }
-
-    if (validProducts.length === 0) {
-      throw new Error(`No valid products found for "${query}"${storeLower ? ` from ${storeLower}` : ''}`);
-    }
-
-    // Sort by price and return the lowest
-    validProducts.sort((a, b) => a.price - b.price);
-    const lowestPrice = validProducts[0].price;
-
-    console.log(`✅ Found lowest price: ₹${lowestPrice} for "${query}"${storesToSearch.length > 0 ? ` from ${storesToSearch.join(', ')}` : ''} (from ${validProducts.length} products)`);
+    console.log(`✅ Found lowest price: ₹${lowestPrice} for "${query}" (from ${filteredProducts.length} results)`);
 
     // Cache the result for 15 minutes
     cacheManager.set(cacheKey, lowestPrice, 15 * 60 * 1000);

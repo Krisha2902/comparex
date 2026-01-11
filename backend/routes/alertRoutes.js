@@ -82,11 +82,14 @@ router.post("/create", async (req, res) => {
     // Create alert
     const alert = await Alert.create({
       userEmail: userEmail.trim(),
-      userPhone: userPhone.trim(),
+      userPhone: userPhone ? userPhone.trim() : undefined,
       productName: productName.trim(),
       productUrl: productUrl ? productUrl.trim() : undefined,
       stores: storesArray,
       targetPrice,
+      currentPrice: req.body.currentPrice || undefined,
+      lastCheckedPrice: req.body.currentPrice || undefined,
+      priceHistory: req.body.currentPrice ? [{ price: req.body.currentPrice, timestamp: new Date() }] : [],
       isTriggered: false
     });
 
@@ -121,6 +124,55 @@ router.post("/create", async (req, res) => {
       message: "Failed to create price alert",
       error: process.env.NODE_ENV === 'development' ? error.message : "Internal server error"
     });
+  }
+});
+
+
+// GET /list/:userEmail - Get all alerts for a user
+router.get("/list/:userEmail", async (req, res) => {
+  try {
+    const { userEmail } = req.params;
+    if (!userEmail) return res.status(400).json({ success: false, message: "User email required" });
+
+    const alerts = await Alert.find({ userEmail }).sort({ createdAt: -1 });
+    res.json({ success: true, count: alerts.length, alerts });
+  } catch (error) {
+    console.error("Error fetching alerts:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch alerts" });
+  }
+});
+
+// GET /notifications/:userEmail - Get triggered alerts
+router.get("/notifications/:userEmail", async (req, res) => {
+  try {
+    const { userEmail } = req.params;
+    // Find alerts that are triggered
+    const alerts = await Alert.find({
+      userEmail,
+      isTriggered: true
+    }).sort({ triggeredAt: -1 }).limit(10);
+
+    res.json({ success: true, count: alerts.length, notifications: alerts });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch notifications" });
+  }
+});
+
+// DELETE /:id - Delete an alert
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Alert.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Alert not found" });
+    }
+
+    res.json({ success: true, message: "Alert deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting alert:", error);
+    res.status(500).json({ success: false, message: "Failed to delete alert" });
   }
 });
 

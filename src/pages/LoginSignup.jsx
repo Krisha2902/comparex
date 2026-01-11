@@ -82,6 +82,10 @@ export default function LoginSignup({ onLogin }) {
 
         if (res.ok && data.token) {
           localStorage.setItem("token", data.token);
+          if (data.user) {
+            localStorage.setItem("userEmail", data.user.email);
+            localStorage.setItem("userName", data.user.name);
+          }
           if (onLogin) onLogin();
           // Redirect to intended destination or home page
           navigate(from, { replace: true });

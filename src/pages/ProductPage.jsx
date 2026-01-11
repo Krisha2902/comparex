@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { searchProducts } from "../services/productService";
-import { createAlert } from "../api/alertApi"; 
+import { initiateSearch, getSearchStatus } from "../services/productService";
+import { createAlert } from "../api/alertApi";
 import Navbar from "../components/Navbar";
 import PriceTable from "../components/PriceTable";
 import PriceHistory from "../components/PriceHistory";
@@ -15,14 +15,14 @@ export default function ProductPage() {
   const query = params.get("query");
 
   const [products, setProducts] = useState([]);
-
   const [loading, setLoading] = useState(false);
-
+  const [statusMsg, setStatusMsg] = useState("");
 
   //  ALERT STATES
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [targetPrice, setTargetPrice] = useState("");
+  const [email, setEmail] = useState("");
 
   // Get first product image if available, else use placeholder
   const productImage =
@@ -30,23 +30,63 @@ export default function ProductPage() {
       ? products[0].image
       : PLACEHOLDER_IMAGE;
 
-   // Fetch products when query changes
+  // Search logic with streaming results
   useEffect(() => {
     if (!query) return;
 
-    setLoading(true);
-    setProducts([]); // Clear previous results
+    let pollInterval;
+    let isMounted = true;
 
-    searchProducts(query)
-      .then((data) => {
-        setProducts(data);
+    const startSearch = async () => {
+      setLoading(true);
+      setProducts([]);
+      setStatusMsg("Starting search...");
+
+      try {
+        const jobId = await initiateSearch(query);
+
+        pollInterval = setInterval(async () => {
+          if (!isMounted) return;
+          try {
+            const data = await getSearchStatus(jobId);
+
+            if (data.results && data.results.length > 0) {
+              setProducts(data.results);
+            }
+
+            if (data.status === "completed") {
+              setLoading(false);
+              setStatusMsg("");
+              clearInterval(pollInterval);
+            } else if (data.status === "failed") {
+              setLoading(false);
+              setStatusMsg("Search failed partially or completely.");
+              clearInterval(pollInterval);
+            } else {
+              // Still running
+              setStatusMsg(`Searching... Found ${data.results ? data.results.length : 0} products`);
+            }
+          } catch (err) {
+            console.error("Polling error:", err);
+            // Don't stop polling immediately on one network error, but maybe limit retries?
+            // For now, let it continue or fail on repeated errors? 
+            // Simple approach: stick to interval.
+          }
+        }, 1500); // Fast 1.5s updates
+
+      } catch (err) {
+        console.error("Search init error:", err);
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Search Error:", err);
-        setLoading(false);
-        // data remains empty, UI will show "No products found" if logic allows
-      });
+        setStatusMsg("Failed to start search");
+      }
+    };
+
+    startSearch();
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [query]);
 
 
@@ -55,22 +95,45 @@ export default function ProductPage() {
   const openAlertModal = (product) => {
     setSelectedProduct(product);
     setTargetPrice("");
+    // If user is logged in (token exists), we might ideally decode it to get email, 
+    // but for now let's leave email empty or pre-fill if we had user context.
+    // Assuming simple behavior: always ask email if we don't have a robust user context provider yet.
+    setEmail(localStorage.getItem("userEmail") || "");
     setShowAlertModal(true);
   };
 
   //  SAVE ALERT (FINAL & CORRECT)
   const saveAlert = async () => {
-    try {
-      await createAlert({
-        productId: selectedProduct.productId,
-        store: selectedProduct.store,
-        currentPrice: selectedProduct.price,
-        targetPrice: Number(targetPrice),
-      });
+    if (!targetPrice || Number(targetPrice) <= 0) {
+      alert("Please enter a valid target price.");
+      return;
+    }
 
+    if (!email || !email.includes("@")) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    try {
+      if (!selectedProduct) return;
+
+      const alertData = {
+        userEmail: email,
+        productName: selectedProduct.title, // Map title correctly
+        productUrl: selectedProduct.productUrl, // Pass URL for direct scraping optimization
+        store: selectedProduct.source,
+        targetPrice: Number(targetPrice),
+        currentPrice: selectedProduct.price
+      };
+
+      await createAlert(alertData);
+
+      alert("Price alert set successfully! We will notify you when the price drops.");
       setShowAlertModal(false);
     } catch (error) {
       console.error("Failed to save alert", error);
+      const msg = error.response?.data?.message || "Failed to set price alert. Please try again.";
+      alert(msg);
     }
   };
 
@@ -119,8 +182,8 @@ export default function ProductPage() {
         </div>
 
         {loading && (
-          <p className="text-center text-gray-500 mt-6">
-            Searching best prices...
+          <p className="text-center text-blue-600 mt-6 animate-pulse">
+            {statusMsg || "Searching best prices..."}
           </p>
         )}
 
@@ -134,7 +197,7 @@ export default function ProductPage() {
 
         {/* PRICE TABLE */}
         <PriceTable products={products}
-        onSetAlert={openAlertModal} />
+          onSetAlert={openAlertModal} />
 
         {/* PRICE HISTORY */}
         {!loading && products.length > 0 && <PriceHistory products={products} />}
@@ -142,39 +205,55 @@ export default function ProductPage() {
         {/* SIMILAR PRODUCTS */}
         <SimilarProducts products={products} />
 
-        
+
       </div>
       {/* ALERT MODAL */}{showAlertModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl w-[320px]">
+          <div className="bg-white p-6 rounded-xl w-[320px] shadow-lg">
             <h3 className="text-lg font-semibold mb-3">
               Set Price Alert
             </h3>
 
-            <p className="text-sm text-gray-600 mb-2">
-              Notify me when price drops below
+            <p className="text-sm text-gray-600 mb-4">
+              Notify me when <b>{selectedProduct?.source}</b> price drops below:
             </p>
 
-            <input
-              type="number"
-              className="w-full border px-3 py-2 rounded-md mb-4"
-              placeholder="Enter target price"
-              value={targetPrice}
-              onChange={(e) => setTargetPrice(e.target.value)}
-            />
+            <div className="space-y-3 mb-6">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Target Price (₹)</label>
+                <input
+                  type="number"
+                  className="w-full border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. 50000"
+                  value={targetPrice}
+                  onChange={(e) => setTargetPrice(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Email Address</label>
+                <input
+                  type="email"
+                  className="w-full border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
 
             <div className="flex justify-end gap-2">
               <button
-                className="px-4 py-2 text-sm bg-gray-200 rounded-md"
+                className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
                 onClick={() => setShowAlertModal(false)}
               >
                 Cancel
               </button>
 
               <button
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-md"
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={saveAlert}
-                disabled={!targetPrice}
+                disabled={!targetPrice || !email}
               >
                 Save Alert
               </button>

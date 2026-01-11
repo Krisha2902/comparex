@@ -1,5 +1,7 @@
 const BaseScraper = require('./baseScraper');
 const { normalizeProductData } = require('../utils/normalizer');
+const selectors = require('../config/selectors').croma;
+const scraperConfig = require('../config/scraperConfig');
 
 class CromaScraper extends BaseScraper {
     constructor(browserManager) {
@@ -23,40 +25,67 @@ class CromaScraper extends BaseScraper {
             }
 
             // Wait for title
-            await page.waitForSelector('h1', { timeout: 15000 }).catch(() => console.log('Title not found immediately'));
+            const titleSelector = selectors.title[0] || 'h1';
+            await page.waitForSelector(titleSelector, { timeout: scraperConfig.timeouts.selectorWait }).catch(() => console.log('Title not found immediately'));
 
-            const data = await page.evaluate(() => {
+            const data = await page.evaluate((selectors) => {
                 const getText = (selector) => {
                     const el = document.querySelector(selector);
                     return el ? el.innerText.trim() : null;
                 };
 
-                const title = document.querySelector('h1')?.innerText.trim();
+                let title = null;
+                for (const sel of selectors.title) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        title = el.innerText.trim();
+                        break;
+                    }
+                }
 
                 // Prices
                 // Croma structure varies, checking common classes
-                const currentPriceText = getText('.pd-price') || getText('.amount');
-                const current = currentPriceText ? parseFloat(currentPriceText.replace(/[^0-9.]/g, '')) : null;
+                let current = null;
+                for (const sel of selectors.price.current) {
+                    const currentPriceText = getText(sel);
+                    if (currentPriceText) {
+                        current = parseFloat(currentPriceText.replace(/[^0-9.]/g, ''));
+                        break;
+                    }
+                }
 
-                const mrpText = getText('.pd-mrp') || getText('.old-price');
-                const mrp = mrpText ? parseFloat(mrpText.replace(/[^0-9.]/g, '')) : null;
+                let mrp = null;
+                for (const sel of selectors.price.mrp) {
+                    const mrpText = getText(sel);
+                    if (mrpText) {
+                        mrp = parseFloat(mrpText.replace(/[^0-9.]/g, ''));
+                        break;
+                    }
+                }
 
                 // Images
                 const images = [];
                 // Croma uses a slider usually
-                const imgElements = document.querySelectorAll('.product-gallery-slider img') || document.querySelectorAll('.pd-img img');
-                imgElements.forEach(img => {
-                    if (img.src) images.push(img.src);
-                });
+                for (const sel of selectors.images) {
+                    const imgElements = document.querySelectorAll(sel);
+                    imgElements.forEach(img => {
+                        if (img.src) images.push(img.src);
+                    });
+                    if (images.length > 0) break;
+                }
 
                 // Description
-                const description = getText('.overview-desc') || getText('.cp-desc');
+                let description = null;
+                for (const sel of selectors.description) {
+                    description = getText(sel);
+                    if (description) break;
+                }
 
                 // Specifications
                 const specs = {};
                 // Specs are often in lists or tables
                 // Looking for key-value pairs in lists
-                const specItems = document.querySelectorAll('.cp-specification li');
+                const specItems = document.querySelectorAll(selectors.specs.items);
                 specItems.forEach(item => {
                     // "Key : Value" format often
                     const text = item.innerText;
@@ -71,23 +100,36 @@ class CromaScraper extends BaseScraper {
                 // Rating - use null when not present and validate
                 let ratingVal = null;
                 let ratingCount = null;
-                const ratingEl = document.querySelector('[class*="rating"], [class*="stars"]');
-                if (ratingEl) {
-                    const ratingText = ratingEl.innerText || ratingEl.textContent;
-                    if (ratingText) {
-                        const match = ratingText.match(/(\d+\.?\d*)/);
-                        if (match) {
-                            const rv = parseFloat(match[1]);
-                            if (Number.isFinite(rv) && rv >= 0 && rv <= 5) ratingVal = rv;
+                for (const sel of selectors.rating.element) {
+                    const ratingEl = document.querySelector(sel);
+                    if (ratingEl) {
+                        const ratingText = ratingEl.innerText || ratingEl.textContent;
+                        if (ratingText) {
+                            const match = ratingText.match(/(\d+\.?\d*)/);
+                            if (match) {
+                                const rv = parseFloat(match[1]);
+                                if (Number.isFinite(rv) && rv >= 0 && rv <= 5) {
+                                    ratingVal = rv;
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
 
                 // Availability - check for out of stock indicators
-                const isOutOfStock = !!(
-                    document.querySelector('[class*="outOfStock"], [class*="unavailable"]') ||
-                    document.body.innerText.toLowerCase().includes('out of stock')
-                );
+                let isOutOfStock = false;
+                for (const sel of selectors.availability.outOfStock) {
+                    if (document.querySelector(sel)) {
+                        isOutOfStock = true;
+                        break;
+                    }
+                }
+                if (!isOutOfStock) {
+                    if (document.body.innerText.toLowerCase().includes('out of stock')) {
+                        isOutOfStock = true;
+                    }
+                }
 
                 return {
                     platform: 'croma',
@@ -108,7 +150,7 @@ class CromaScraper extends BaseScraper {
                     availability: !isOutOfStock,
                     reviews: []
                 };
-            });
+            }, selectors);
 
             data.url = url;
 

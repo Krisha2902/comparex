@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import { searchProducts } from "../services/productService";
+import { initiateSearch, getSearchStatus } from "../services/productService";
 import OptimizedImage from "../components/OptimizedImage";
 
 function ComparePage() {
@@ -12,10 +12,19 @@ function ComparePage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
 
   // Track in-flight search to prevent duplicates
   const searchInProgress = useRef(false);
   const lastSearchQuery = useRef("");
+  const pollIntervalRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
 
   // Auto-search if query comes from URL
   useEffect(() => {
@@ -30,10 +39,12 @@ function ComparePage() {
       return;
     }
 
-    // Prevent duplicate searches
+    // Prevent duplicate searches (simple check)
     if (searchInProgress.current) {
-      console.log("Search already in progress, skipping...");
-      return;
+      // If query is same, skip. If different, we might want to cancel previous?
+      if (searchQuery === lastSearchQuery.current) return;
+      // If different, we proceed (and maybe should cancel previous polling)
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     }
 
     // Mark search as in progress
@@ -42,61 +53,44 @@ function ComparePage() {
 
     setLoading(true);
     setError("");
+    setProducts([]);
+    setStatusMsg("Starting search...");
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
     try {
       console.log(`🔍 Searching for: "${searchQuery}"`);
-      const data = await searchProducts(searchQuery, "electronics");
+      const jobId = await initiateSearch(searchQuery, "electronics");
 
-      console.log(`📦 Received data:`, data);
-      console.log(`📦 Data type:`, typeof data);
-      console.log(`📦 Is array:`, Array.isArray(data));
-      console.log(`📦 Data length:`, Array.isArray(data) ? data.length : 'N/A');
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const data = await getSearchStatus(jobId);
 
-      // Check if data is an array (successful response)
-      if (Array.isArray(data)) {
-        console.log(`✅ Setting ${data.length} products`);
-        setProducts(data);
-        // Empty array is not an error - it's a valid result
-        if (data.length === 0) {
-          console.log(`⚠️ No products found for: "${searchQuery}"`);
-          // Don't set error, just show the "no results" message
-        } else {
-          console.log(`✅ Products found:`, data.map(p => `${p.source}: ${p.title.substring(0, 40)}`));
+          if (data.results && Array.isArray(data.results)) {
+            setProducts(data.results);
+          }
+
+          if (data.status === "completed") {
+            setLoading(false);
+            setStatusMsg("");
+            searchInProgress.current = false;
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          } else if (data.status === "failed") {
+            setLoading(false);
+            setError(data.error || "Search failed");
+            searchInProgress.current = false;
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          } else {
+            setStatusMsg(`Searching... Found ${data.results ? data.results.length : 0} products`);
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+          // Optional: stop on persistent error
         }
-      } else {
-        // Backend returned an error object
-        console.error(`❌ Backend returned non-array:`, data);
-        setError(data.message || "No products found. Try a different search term.");
-        setProducts([]);
-      }
+      }, 1500);
+
     } catch (err) {
       console.error("❌ Search error:", err);
-      console.error("Error details:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        request: err.request ? "Request made but no response" : "No request made"
-      });
-
-      // Handle different types of errors
-      if (err.response) {
-        // Backend returned an error response
-        const errorMsg = err.response.data?.message || err.response.data?.error || "Failed to search products.";
-        setError(errorMsg);
-        console.error(`Backend error: ${errorMsg}`);
-      } else if (err.request) {
-        // Network error - backend not reachable
-        const errorMsg = "Cannot connect to the server. Please make sure the backend server is running on port 5000.";
-        setError(errorMsg);
-        console.error(`Network error: ${errorMsg}`);
-      } else {
-        // Other errors
-        const errorMsg = `Failed to search products: ${err.message}`;
-        setError(errorMsg);
-        console.error(`Other error: ${errorMsg}`);
-      }
-      setProducts([]);
-    } finally {
+      setError(err.message || "Failed to start search");
       setLoading(false);
       searchInProgress.current = false;
     }
@@ -155,12 +149,12 @@ function ComparePage() {
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
-            <p className="text-gray-500">Searching across Amazon, Flipkart, Croma, and Reliance...</p>
+            <p className="text-blue-600 font-medium animate-pulse">{statusMsg || "Searching across Amazon, Flipkart, Croma, and Reliance..."}</p>
           </div>
         )}
 
-        {/* Products Grid */}
-        {!loading && products.length > 0 && (
+        {/* Products Grid - Show if we have products, even if still loading */}
+        {products.length > 0 && (
           <div>
             {/* Filter and validate products - only show those with valid prices and titles */}
             {(() => {
@@ -269,7 +263,7 @@ function ComparePage() {
           </div>
         )}
 
-        {/* No Results */}
+        {/* No Results - Only show if not loading and no products */}
         {!loading && products.length === 0 && query && !error && (
           <div className="text-center py-12">
             <p className="text-gray-500">No products found. Try searching with a different term.</p>

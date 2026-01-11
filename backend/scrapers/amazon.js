@@ -1,5 +1,6 @@
 const BaseScraper = require('./baseScraper');
 const { normalizeProductData } = require('../utils/normalizer');
+const selectors = require('../config/selectors').amazon;
 
 class AmazonScraper extends BaseScraper {
     constructor(browserManager) {
@@ -27,13 +28,14 @@ class AmazonScraper extends BaseScraper {
             }
 
             // Wait for critical elements with multiple fallbacks
+            // Use config selectors
+            const titlePromise = selectors.title.map(sel => page.waitForSelector(sel, { timeout: 5000 }).catch(() => null));
             await Promise.race([
-                page.waitForSelector('#productTitle', { timeout: 5000 }).catch(() => null),
-                page.waitForSelector('h1.a-size-large', { timeout: 5000 }).catch(() => null),
+                ...titlePromise,
                 new Promise(resolve => setTimeout(resolve, 5000))
             ]);
 
-            const data = await page.evaluate(() => {
+            const data = await page.evaluate((selectors) => {
                 const getText = (selector) => {
                     const el = document.querySelector(selector);
                     return el ? el.innerText.trim() : null;
@@ -45,24 +47,18 @@ class AmazonScraper extends BaseScraper {
                 };
 
                 // Title - try multiple selectors
-                const title = getText('#productTitle') ||
-                    getText('h1.product-title') ||
-                    getText('h1');
+                let title = null;
+                for (const sel of selectors.title) {
+                    title = getText(sel);
+                    if (title) break;
+                }
 
                 // Prices with multiple fallback selectors
                 let mrp = null;
                 let currentPrice = null;
 
                 // Current price selectors
-                const priceSelectors = [
-                    '.a-price .a-offscreen',
-                    '.a-price-whole',
-                    '#priceblock_ourprice',
-                    '#priceblock_dealprice',
-                    '.a-price.a-text-price .a-offscreen'
-                ];
-
-                for (const selector of priceSelectors) {
+                for (const selector of selectors.price.current) {
                     const priceEl = document.querySelector(selector);
                     if (priceEl && !currentPrice) {
                         const priceText = priceEl.innerText || priceEl.textContent;
@@ -74,14 +70,7 @@ class AmazonScraper extends BaseScraper {
                 }
 
                 // MRP selectors
-                const mrpSelectors = [
-                    '.a-text-price .a-offscreen',
-                    '#listPrice',
-                    '.a-price.a-text-price',
-                    'span.a-price.a-text-price span.a-offscreen'
-                ];
-
-                for (const selector of mrpSelectors) {
+                for (const selector of selectors.price.mrp) {
                     const mrpEl = document.querySelector(selector);
                     if (mrpEl && !mrp) {
                         const mrpText = mrpEl.innerText || mrpEl.textContent;
@@ -115,14 +104,19 @@ class AmazonScraper extends BaseScraper {
                 }
 
                 // Description
-                const description = getText('#productDescription') ||
-                    getText('#feature-bullets') ||
-                    getText('.a-unordered-list.a-vertical');
+                let description = null;
+                for (const sel of selectors.description) {
+                    description = getText(sel);
+                    if (description) break;
+                }
 
                 // Brand
-                const brand = getText('#bylineInfo') ||
-                    getText('.po-brand .po-break-word') ||
-                    getAttribute('a#bylineInfo', 'innerText');
+                let brand = null;
+                for (const sel of selectors.brand) {
+                    brand = getText(sel) || getAttribute(sel, 'innerText');
+                    if (brand) break;
+                }
+
 
                 // Specifications
                 const specs = {};
@@ -149,7 +143,12 @@ class AmazonScraper extends BaseScraper {
                 let ratingVal = null;
                 let ratingCount = null;
 
-                const ratingText = getText('#acrPopover') || getText('span.a-icon-alt');
+                let ratingText = null;
+                for (const sel of selectors.rating.value) {
+                    ratingText = getText(sel);
+                    if (ratingText) break;
+                }
+
                 if (ratingText) {
                     const match = ratingText.match(/(\d+\.?\d*)\s*out of/);
                     if (match) {
@@ -158,18 +157,33 @@ class AmazonScraper extends BaseScraper {
                     }
                 }
 
-                const countText = getText('#acrCustomerReviewText');
+                let countText = null;
+                for (const sel of selectors.rating.count) {
+                    countText = getText(sel);
+                    if (countText) break;
+                }
+
                 if (countText) {
                     const cnt = parseInt(countText.replace(/[^0-9]/g, ''));
                     if (Number.isFinite(cnt) && cnt > 0) ratingCount = cnt;
                 }
 
                 // Availability
-                const availability = !!(
-                    document.querySelector('#add-to-cart-button') ||
-                    document.querySelector('#buy-now-button') ||
-                    getText('#availability')?.toLowerCase().includes('in stock')
-                );
+                let availability = false;
+                for (const sel of selectors.availability) {
+                    if (document.querySelector(sel)) {
+                        availability = true;
+                        break;
+                    }
+                }
+                if (!availability) {
+                    // Check text content also simply
+                    const availText = getText('#availability');
+                    if (availText && availText.toLowerCase().includes('in stock')) {
+                        availability = true;
+                    }
+                }
+
 
                 return {
                     platform: 'amazon',
@@ -191,7 +205,7 @@ class AmazonScraper extends BaseScraper {
                     availability,
                     reviews: []
                 };
-            });
+            }, selectors);
 
             data.url = url;
 

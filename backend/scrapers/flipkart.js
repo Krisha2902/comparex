@@ -1,5 +1,7 @@
 const BaseScraper = require('./baseScraper');
 const { normalizeProductData } = require('../utils/normalizer');
+const selectors = require('../config/selectors').flipkart;
+const scraperConfig = require('../config/scraperConfig');
 
 class FlipkartScraper extends BaseScraper {
     constructor(browserManager) {
@@ -24,58 +26,98 @@ class FlipkartScraper extends BaseScraper {
             }
 
             // Wait for title
-            await page.waitForSelector('h1', { timeout: 10000 }).catch(() => console.log('Title not found immediately'));
+            // Try first selector from config
+            const titleSelector = selectors.title[0] || 'h1';
+            await page.waitForSelector(titleSelector, { timeout: scraperConfig.timeouts.selectorWait }).catch(() => console.log('Title not found immediately'));
 
-            const data = await page.evaluate(() => {
+            const data = await page.evaluate((selectors) => {
                 const getText = (selector) => {
                     const el = document.querySelector(selector);
                     return el ? el.innerText.trim() : null;
                 };
 
-                const title = document.querySelector('h1')?.innerText.trim() || getText('.B_NuCI');
+                // Title
+                let title = null;
+                for (const sel of selectors.title) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        title = el.innerText.trim();
+                        break;
+                    }
+                }
 
                 // Prices
                 // Flipkart usually has "₹" in the text, we strip it
-                const currentPriceText = getText('div[class*="_30jeq3"]');
-                const current = currentPriceText ? parseFloat(currentPriceText.replace(/[^0-9.]/g, '')) : null;
+                let current = null;
+                for (const sel of selectors.price.current) {
+                    const currentPriceText = getText(sel);
+                    if (currentPriceText) {
+                        current = parseFloat(currentPriceText.replace(/[^0-9.]/g, ''));
+                        break;
+                    }
+                }
 
-                const mrpText = getText('div[class*="_3I9_wc"]');
-                const mrp = mrpText ? parseFloat(mrpText.replace(/[^0-9.]/g, '')) : null;
+                let mrp = null;
+                for (const sel of selectors.price.mrp) {
+                    const mrpText = getText(sel);
+                    if (mrpText) {
+                        mrp = parseFloat(mrpText.replace(/[^0-9.]/g, ''));
+                        break;
+                    }
+                }
 
                 // Images
-                // Often in a list, or we can get the main one
                 const images = [];
-                const imgElements = document.querySelectorAll('img[class*="_396cs4"]');
-                imgElements.forEach(img => {
-                    if (img.src) images.push(img.src);
-                });
+                for (const sel of selectors.images) {
+                    const imgElements = document.querySelectorAll(sel);
+                    imgElements.forEach(img => {
+                        if (img.src) images.push(img.src);
+                    });
+                    if (images.length > 0) break;
+                }
 
                 // Description
-                const description = getText('.X3BRps') || getText('div[class*="_1mXcCf"]');
+                let description = null;
+                for (const sel of selectors.description) {
+                    description = getText(sel);
+                    if (description) break;
+                }
 
                 // Specifications
                 const specs = {};
-                document.querySelectorAll('.row').forEach(row => {
-                    const key = row.querySelector('.col-3-12')?.innerText.trim();
-                    const val = row.querySelector('.col-9-12')?.innerText.trim();
-                    if (key && val) specs[key] = val;
-                });
-
-                // Rating - use null for missing and validate range
-                const ratingValText = getText('div[class*="_3LWZlK"]');
-                let rating = null;
-                if (ratingValText) {
-                    const rv = parseFloat(ratingValText);
-                    if (Number.isFinite(rv) && rv >= 0 && rv <= 5) rating = rv;
+                if (selectors.specs.row) {
+                    document.querySelectorAll(selectors.specs.row).forEach(row => {
+                        const key = row.querySelector(selectors.specs.key)?.innerText.trim();
+                        const val = row.querySelector(selectors.specs.val)?.innerText.trim();
+                        if (key && val) specs[key] = val;
+                    });
                 }
 
-                const countText = getText('span[class*="_2_R_DZ"]'); // "1,234 Ratings & 100 Reviews"
+                // Rating
+                let rating = null;
+                for (const sel of selectors.rating.value) {
+                    const ratingValText = getText(sel);
+                    if (ratingValText) {
+                        const rv = parseFloat(ratingValText);
+                        if (Number.isFinite(rv) && rv >= 0 && rv <= 5) {
+                            rating = rv;
+                            break;
+                        }
+                    }
+                }
+
                 let count = null;
-                if (countText) {
-                    const matches = countText.match(/([0-9,]+)\s+Ratings/);
-                    if (matches && matches[1]) {
-                        const c = parseInt(matches[1].replace(/,/g, ''));
-                        if (Number.isFinite(c) && c > 0) count = c;
+                for (const sel of selectors.rating.count) {
+                    const countText = getText(sel); // "1,234 Ratings & 100 Reviews"
+                    if (countText) {
+                        const matches = countText.match(/([0-9,]+)\s+Ratings/);
+                        if (matches && matches[1]) {
+                            const c = parseInt(matches[1].replace(/,/g, ''));
+                            if (Number.isFinite(c) && c > 0) {
+                                count = c;
+                                break;
+                            }
+                        }
                     }
                 }
 
@@ -95,10 +137,10 @@ class FlipkartScraper extends BaseScraper {
                         count: count
                     },
                     specifications: specs,
-                    availability: !document.querySelector('button[class*="_32l7f0"]'), // Notify me usually means OOS
+                    availability: !document.querySelector(selectors.availability.notifyButton), // Notify me usually means OOS
                     reviews: []
                 };
-            });
+            }, selectors);
 
             // Fix URL in case it wasn't available in evaluate
             data.url = url;

@@ -115,21 +115,20 @@ async function processScrapingJob(jobId, query, category) {
             platformStatus[s.name.toLowerCase()] = 'pending';
         });
 
-        // SEQUENTIAL scraping to stay within 1GB RAM limit
-        for (const { name, scraper } of scrapers) {
+        // PARALLEL scraping execution
+        const scrapePromises = scrapers.map(async ({ name, scraper }) => {
             try {
                 console.log(`Job ${jobId}: Scraping ${name}...`);
 
-                // Update status
-                platformStatus[name.toLowerCase()] = 'scraping';
+                // Update status (using specific field update to avoid race conditions)
                 await Job.findByIdAndUpdate(jobId, {
-                    progress: `Scraping ${name}...`,
-                    platformStatus
+                    [`platformStatus.${name.toLowerCase()}`]: 'scraping',
+                    progress: `Scraping ${name}...`
                 });
 
                 // Scrape with timeout
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error(`Timeout: ${name} took too long`)), 45000)
+                    setTimeout(() => reject(new Error(`Timeout: ${name} took too long`)), 55000) // 55s timeout (below Amazon 60s but longer than default)
                 );
 
                 const products = await Promise.race([
@@ -139,33 +138,40 @@ async function processScrapingJob(jobId, query, category) {
 
                 console.log(`✅ Job ${jobId}: ${name} found ${products.length} products`);
 
-                // Update status
-                platformStatus[name.toLowerCase()] = 'completed';
+                // Update success
                 allResults.push(...products);
 
-                // Update job with incremental results
+                // Atomic update for restart/stream safety
                 await Job.findByIdAndUpdate(jobId, {
-                    progress: `${name} completed: ${products.length} products found`,
-                    results: allResults,
-                    platformStatus
+                    [`platformStatus.${name.toLowerCase()}`]: 'completed',
+                    progress: `${name} found ${products.length} items`,
+                    $push: { results: { $each: products } }
                 });
+
+                return products;
 
             } catch (err) {
                 console.error(`❌ Job ${jobId}: ${name} failed:`, err.message);
 
-                platformStatus[name.toLowerCase()] = 'failed';
-                errors.push({
+                const errorObj = {
                     platform: name,
                     error: err.message,
                     type: err.message.includes('PLATFORM_BLOCKED') ? 'blocked' : 'error'
-                });
+                };
+
+                errors.push(errorObj);
 
                 await Job.findByIdAndUpdate(jobId, {
-                    errors,
-                    platformStatus
+                    [`platformStatus.${name.toLowerCase()}`]: 'failed',
+                    $push: { errors: errorObj }
                 });
+
+                return []; // Return empty on failure
             }
-        }
+        });
+
+        // Wait for ALL scrapers to finish (success or fail)
+        await Promise.allSettled(scrapePromises);
 
         // Process results (deduplicate, rank, filter)
         console.log(`Job ${jobId}: Processing ${allResults.length} total results...`);

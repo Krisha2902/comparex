@@ -15,8 +15,8 @@ import AdminProtectedRoute from "./components/AdminProtectedRoute";
 import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import ManageProducts from "./pages/ManageProducts";
+import AlertsPage from "./pages/AlertsPage";
 import Comparepage from "./pages/comparepage";
-
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -36,7 +36,7 @@ export default function App() {
 
     // Listen for storage changes (works across tabs)
     window.addEventListener("storage", checkLoginState);
-    
+
     // Also check on mount and periodically (for same-tab changes)
     checkLoginState();
     const interval = setInterval(checkLoginState, 1000);
@@ -68,25 +68,32 @@ export default function App() {
       <Route path="/deals" element={<SmartDeals />} />
 
       {/* Auth page - redirect to home if already logged in */}
-      <Route 
-        path="/auth" 
+      <Route
+        path="/auth"
         element={
           isLoggedIn ? (
             <Navigate to="/" replace />
           ) : (
-            <LoginSignup 
+            <LoginSignup
               onLogin={() => {
                 setIsLoggedIn(true);
                 window.dispatchEvent(new Event('storage'));
-              }} 
+              }}
             />
           )
-        } 
+        }
       />
 
       {/* Protected routes - require login */}
-      <Route 
-        path="/wishlist" 
+      <Route
+        path="/alerts"
+        element={
+          <ProtectedRoute>
+            <AlertsPage />
+          </ProtectedRoute>
+        } />
+      <Route
+        path="/wishlist"
         element={
           <ProtectedRoute>
             <WishlistPage />

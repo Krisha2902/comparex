@@ -19,9 +19,9 @@ router.post("/scrape", async (req, res) => {
 });
 
 // Check job status
-router.get("/status/:jobId", (req, res) => {
+router.get("/status/:jobId", async (req, res) => {
   const { jobId } = req.params;
-  const job = searchService.getJobStatus(jobId);
+  const job = await searchService.getJobStatus(jobId);
 
   if (!job) {
     return res.status(404).json({ message: "Job not found" });
