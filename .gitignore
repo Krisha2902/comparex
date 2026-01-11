@@ -27,3 +27,6 @@ dist-ssr
 # .env - Temporarily enabled for configuration (REMEMBER TO RE-ENABLE BEFORE COMMIT!)
 # .env
 .env
+
+# Documentation folder
+docs/
